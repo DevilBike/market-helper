@@ -21,6 +21,11 @@ public enum ItemGroup
     CraftingMaterials,
     Equipment,
     Tokens,
+    Housing,
+    Collectibles,
+    Materia,
+    Seasonal,
+    Fishing,
 }
 
 public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory, ItemGroup Group);
@@ -58,7 +63,9 @@ public class Valuator
 
         if (Plugin.DataManager.GetExcelSheet<LuminaItem>().TryGetRow(id, out var row))
         {
-            var group = ItemGroups.Classify(row.ItemUICategory.RowId, row.EquipSlotCategory.RowId != 0, row.IsUntradable);
+            var categoryName = row.ItemUICategory.IsValid ? row.ItemUICategory.Value.Name.ToString() : string.Empty;
+            var unlockable = row.IsUnique && row.ItemAction.RowId != 0;
+            var group = ItemGroups.Classify(row.ItemUICategory.RowId, categoryName, row.EquipSlotCategory.RowId != 0, row.IsUntradable, unlockable);
             info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId, group);
         }
         else

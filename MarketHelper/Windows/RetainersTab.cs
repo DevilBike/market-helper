@@ -168,7 +168,7 @@ public class RetainersTab
         var rule = config.GetRule(current.Id);
 
         ImGui.Spacing();
-        ImGui.TextUnformatted("Groups stored here");
+        ImGui.TextUnformatted("Groups stored here (tick as many as you like)");
         ImGui.Separator();
         foreach (var group in ItemGroups.All)
         {
@@ -219,7 +219,7 @@ public class RetainersTab
                         continue;
 
                     var owner = config.RetainerRules.Find(r => r.UiCategories.Contains(id));
-                    var group = ItemGroups.GroupOfCategory(id);
+                    var group = ItemGroups.GroupOfCategory(id, name);
                     var suffix = owner != null && owner.RetainerId != current.Id
                         ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
                         : group != ItemGroup.None ? $" (in {ItemGroups.Label(group)})" : "";
