@@ -8,7 +8,7 @@ namespace MarketHelper;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 0;
+    public int Version { get; set; } = 1;
 
     // Valuation thresholds
     public int MinMarketValue { get; set; } = 1000;
@@ -23,12 +23,29 @@ public class Configuration : IPluginConfiguration
 
     // Scanning
     public bool IncludeArmory { get; set; } = false;
+    public bool DetectRetainers { get; set; } = true;
 
     // Listing
     public int UndercutAmount { get; set; } = 1;
     public float MinPriceRatio { get; set; } = 0.5f;
-    public int MinActionDelayMs { get; set; } = 800;
-    public int MaxActionDelayMs { get; set; } = 2500;
+    public int MinActionDelayMs { get; set; } = 400;
+    public int MaxActionDelayMs { get; set; } = 1200;
+
+    // Version 0 had slower listing delays; move people still on those defaults to the new ones
+    public void Migrate()
+    {
+        if (Version < 1)
+        {
+            if (MinActionDelayMs == 800 && MaxActionDelayMs == 2500)
+            {
+                MinActionDelayMs = 400;
+                MaxActionDelayMs = 1200;
+            }
+
+            Version = 1;
+            Save();
+        }
+    }
 
     public RetainerRule GetRule(ulong retainerId)
     {

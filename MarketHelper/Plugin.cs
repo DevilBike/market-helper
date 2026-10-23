@@ -44,6 +44,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         Instance = this;
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Configuration.Migrate();
 
         Store = new InventoryStore(PluginInterface.GetPluginConfigDirectory());
         Scanner = new InventoryScanner(Store);

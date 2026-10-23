@@ -22,7 +22,7 @@ public class ValuationTab
     private DateTime nextRowRefresh = DateTime.MinValue;
     private DateTime nextPriceCheck = DateTime.MinValue;
 
-    private int verdictFilter = 1;
+    private int verdictFilter;
     private ulong characterFilter;
     private string search = string.Empty;
 
@@ -138,6 +138,12 @@ public class ValuationTab
         ImGui.TextUnformatted(
             $"Sell on MB: {sell.Count} stacks, about {sell.Sum(r => r.StackValue):N0} gil    " +
             $"Vendor: {vendor.Count} stacks, {vendor.Sum(r => r.VendorValue):N0} gil");
+
+        // Shows where things stand, so an empty list can be explained at a glance
+        var pending = scoped.Count(r => r.Verdict == Verdict.Pending);
+        ImGui.TextDisabled(
+            $"{plugin.Store.Characters.Count} characters and {rows.Count} item stacks recorded. " +
+            (pending > 0 ? $"{pending} still waiting for prices." : "All prices loaded."));
 
         if (plugin.Store.Characters.Count == 0)
             ImGui.TextWrapped("Nothing recorded yet. Your bags are read automatically; open each retainer's inventory once to record it.");

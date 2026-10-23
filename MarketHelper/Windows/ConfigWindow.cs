@@ -58,6 +58,13 @@ public class ConfigWindow : Window, IDisposable
             plugin.Scanner.RequestScan();
         }
 
+        var detect = configuration.DetectRetainers;
+        if (ImGui.Checkbox("Find my retainers automatically at a summoning bell", ref detect))
+        {
+            configuration.DetectRetainers = detect;
+            configuration.Save();
+        }
+
         var cacheMinutes = configuration.PriceCacheMinutes;
         if (ImGui.SliderInt("Refresh prices after (min)", ref cacheMinutes, 5, 240))
         {

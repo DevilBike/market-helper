@@ -81,6 +81,9 @@ public sealed class UniversalisClient : IDisposable
             LastError = null;
             foreach (var batch in stale.Chunk(BatchSize))
                 await FetchBatch(world, batch);
+
+            if (stale.Count > 0)
+                Plugin.Log.Information($"Fetched Universalis prices for {stale.Count} items on {world}");
         }
         catch (Exception ex)
         {
