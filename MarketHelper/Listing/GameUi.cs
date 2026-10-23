@@ -40,7 +40,9 @@ public static unsafe class GameUi
         if (evt == null)
             return false;
 
-        addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, evt, null);
+        // Some windows (RetainerSell's Confirm) read the event data, so it can't be null
+        var data = stackalloc AtkEventData[1];
+        addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, evt, data);
         return true;
     }
 
