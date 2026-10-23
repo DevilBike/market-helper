@@ -11,7 +11,7 @@ public static unsafe class GameUi
         var addon = Plugin.GameGui.GetAddonByName(name, 1);
         if (addon.IsNull || !addon.IsVisible || !addon.IsReady)
             return null;
-        return addon.Struct;
+        return (AtkUnitBase*)addon.Address;
     }
 
     public static bool IsOpen(string name) => GetReady(name) != null;
@@ -51,7 +51,7 @@ public static unsafe class GameUi
         for (var i = 0; i < count; i++)
         {
             var value = menu->AtkValues[8 + i];
-            if (value.Type is not (AtkValueType.String or AtkValueType.ConstString or AtkValueType.ManagedString or AtkValueType.String8))
+            if (value.Type is not (AtkValueType.String or AtkValueType.ConstString or AtkValueType.ManagedString))
                 continue;
 
             var entry = MemoryHelper.ReadSeStringNullTerminated((nint)value.String.Value).TextValue;

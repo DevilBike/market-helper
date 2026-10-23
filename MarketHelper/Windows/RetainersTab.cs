@@ -300,7 +300,7 @@ public class RetainersTab
     private string CategoryName(uint id) =>
         categories.Find(c => c.Id == id).Name ?? $"Category {id}";
 
-    private static void Colored(Vector4 color, string text) => ImGui.TextColored(ref color, text);
+    private static void Colored(Vector4 color, string text) => ImGui.TextColored(in color, text);
 
     private static string ItemLabel(Move move) =>
         $"{move.Item.Name}{(move.IsHq ? " (HQ)" : "")} x{move.Quantity}";

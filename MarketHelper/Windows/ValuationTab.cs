@@ -76,7 +76,7 @@ public class ValuationTab
         {
             ImGui.SameLine();
             var red = new Vector4(1f, 0.4f, 0.4f, 1f);
-            ImGui.TextColored(ref red, $"Price lookup failed: {error}");
+            ImGui.TextColored(in red, $"Price lookup failed: {error}");
         }
 
         ImGui.SetNextItemWidth(150 * ImGuiHelpers.GlobalScale);
