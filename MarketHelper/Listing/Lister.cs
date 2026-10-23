@@ -123,7 +123,7 @@ public sealed unsafe class Lister : IDisposable
             AddPricingSteps(isNew: false);
         }
 
-        runner.Add("Finish", () => AddLog($"Done. Checked {Finished} of {Total} listings."));
+        runner.Add("Finish", () => AddLog($"Done. Checked {Finished} of {Total} listings."), input: false);
     }
 
     public void ListItems(IReadOnlyList<BagSlot> slots)
@@ -144,7 +144,7 @@ public sealed unsafe class Lister : IDisposable
             AddPricingSteps(isNew: true);
         }
 
-        runner.Add("Finish", () => AddLog($"Done. Handled {Finished} of {Total} items."));
+        runner.Add("Finish", () => AddLog($"Done. Handled {Finished} of {Total} items."), input: false);
     }
 
     private void StartBatch(int total)
@@ -156,13 +156,13 @@ public sealed unsafe class Lister : IDisposable
 
     private void AddPricingSteps(bool isNew)
     {
-        runner.Add("Wait for the sell window", () => ReadSellWindow(isNew));
+        runner.Add("Wait for the sell window", () => ReadSellWindow(isNew), input: false);
         runner.Add("Compare prices", ComparePrices);
-        runner.Add("Read market prices", ReadOffers);
+        runner.Add("Read market prices", ReadOffers, input: false);
         runner.Add("Close the price list", ClosePriceList);
         runner.Add("Set the price", SetPrice);
         runner.Add("Confirm", Confirm);
-        runner.Add("Wait for the sell window to close", () => GameUi.IsOpen(SellAddon) ? StepResult.Wait : StepResult.Done);
+        runner.Add("Wait for the sell window to close", () => GameUi.IsOpen(SellAddon) ? StepResult.Wait : StepResult.Done, input: false);
     }
 
     private StepResult OpenListingMenu(int row)

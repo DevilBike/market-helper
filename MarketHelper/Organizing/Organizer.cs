@@ -10,6 +10,7 @@ public record RetainerRef(CharacterRecord Owner, Location Location)
     public ulong Id => Location.RetainerId;
     public string Name => Location.RetainerName;
     public string Label => $"{Location.RetainerName} ({Owner.Name})";
+    public bool Scanned => Location.UpdatedUtc != System.DateTime.MinValue;
 }
 
 public record Move(RetainerRef From, RetainerRef To, ItemInfo Item, bool IsHq, int Quantity)

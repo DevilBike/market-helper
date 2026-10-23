@@ -7,8 +7,8 @@ namespace MarketHelper.Listing;
 // Collects the market board listings the game receives after "Compare Prices".
 public sealed class OfferingsWatcher : IDisposable
 {
-    private static readonly TimeSpan QuietTime = TimeSpan.FromMilliseconds(600);
-    private static readonly TimeSpan NoReplyTime = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan QuietTime = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan NoReplyTime = TimeSpan.FromSeconds(3);
 
     private readonly List<IMarketBoardItemListing> listings = new();
     private bool armed;

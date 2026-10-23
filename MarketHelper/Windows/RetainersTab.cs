@@ -127,7 +127,8 @@ public class RetainersTab
                 {
                     var stacks = plan.StacksAfter.GetValueOrDefault(retainer.Id, retainer.Location.Items.Count);
                     var catchAll = config.CatchAllRetainerId == retainer.Id ? " *" : "";
-                    if (ImGui.Selectable($"{retainer.Label}{catchAll}##{retainer.Id}", selected == retainer.Id))
+                    var unscanned = retainer.Scanned ? "" : " (not opened yet)";
+                    if (ImGui.Selectable($"{retainer.Label}{catchAll}{unscanned}##{retainer.Id}", selected == retainer.Id))
                         selected = retainer.Id;
 
                     if (stacks > Organizer.RetainerSlots)

@@ -81,6 +81,9 @@ public sealed unsafe class InventoryScanner : IDisposable
             return;
         nextScan = now + ScanInterval;
 
+        if (Plugin.Instance.Configuration.DetectRetainers)
+            DetectRetainers();
+
         // Retainer windows don't always raise inventory events when they open
         var retainerOpen = IsRetainerInventoryOpen();
         if (!dirty && !retainerOpen)
@@ -127,6 +130,49 @@ public sealed unsafe class InventoryScanner : IDisposable
                 var name = retainer->NameString;
                 changed |= Snapshot(record, LocationKind.Retainer, RetainerPages, retainer->RetainerId, name);
                 changed |= Snapshot(record, LocationKind.RetainerMarket, [GameInventoryType.RetainerMarket], retainer->RetainerId, name);
+            }
+        }
+
+        if (changed)
+            store.Save();
+    }
+
+    // Adds every retainer the game knows about for this character, so they show up
+    // in the Retainers tab before their inventory has been opened
+    private void DetectRetainers()
+    {
+        var player = Plugin.PlayerState;
+        var manager = RetainerManager.Instance();
+        if (!player.IsLoaded || player.ContentId == 0 || manager == null || !manager->IsReady)
+            return;
+
+        var record = store.GetOrAdd(player.ContentId);
+        var changed = false;
+        foreach (ref readonly var retainer in manager->Retainers)
+        {
+            if (retainer.RetainerId == 0)
+                continue;
+
+            var name = retainer.NameString;
+            if (name.Length == 0)
+                continue;
+
+            var key = CharacterRecord.LocationKey(LocationKind.Retainer, retainer.RetainerId);
+            if (!record.Locations.TryGetValue(key, out var location))
+            {
+                record.Locations[key] = new Location
+                {
+                    Kind = LocationKind.Retainer,
+                    RetainerId = retainer.RetainerId,
+                    RetainerName = name,
+                    UpdatedUtc = DateTime.MinValue,
+                };
+                changed = true;
+            }
+            else if (location.RetainerName != name)
+            {
+                location.RetainerName = name;
+                changed = true;
             }
         }
 

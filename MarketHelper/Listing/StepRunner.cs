@@ -12,12 +12,13 @@ public enum StepResult
 }
 
 // Runs a queue of small steps on the game's main thread, one per frame at most,
-// with a random pause between steps so input arrives at a human pace.
+// with a random pause after each step that touches the game, so input arrives
+// at a human pace. Steps that only wait or read move on at once.
 public sealed class StepRunner : IDisposable
 {
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(8);
 
-    private readonly LinkedList<(string Name, Func<StepResult> Run)> steps = new();
+    private readonly LinkedList<(string Name, Func<StepResult> Run, bool Input)> steps = new();
     private readonly Random random = new();
     private readonly Func<(int Min, int Max)> delayRange;
 
@@ -39,13 +40,13 @@ public sealed class StepRunner : IDisposable
 
     public void Dispose() => Plugin.Framework.Update -= OnUpdate;
 
-    public void Add(string name, Func<StepResult> run) => steps.AddLast((name, run));
+    public void Add(string name, Func<StepResult> run, bool input = true) => steps.AddLast((name, run, input));
 
-    public void Add(string name, Action run) => Add(name, () =>
+    public void Add(string name, Action run, bool input = true) => Add(name, () =>
     {
         run();
         return StepResult.Done;
-    });
+    }, input);
 
     // Removes queued steps after the current one until one matches
     public void SkipUntilNext(Func<string, bool> isNext)
@@ -102,8 +103,11 @@ public sealed class StepRunner : IDisposable
                 if (node.List != null)
                     steps.Remove(node);
                 stepActive = false;
-                var (min, max) = delayRange();
-                Pause(min, max);
+                if (node.Value.Input)
+                {
+                    var (min, max) = delayRange();
+                    Pause(min, max);
+                }
                 break;
             case StepResult.Fail:
                 var name = node.Value.Name;
