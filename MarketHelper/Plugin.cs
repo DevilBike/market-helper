@@ -5,6 +5,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using MarketHelper.Inventory;
 using MarketHelper.Market;
+using MarketHelper.Organizing;
 using MarketHelper.Windows;
 
 namespace MarketHelper;
@@ -30,6 +31,7 @@ public sealed class Plugin : IDalamudPlugin
     public InventoryScanner Scanner { get; init; }
     public UniversalisClient Universalis { get; init; }
     public Valuator Valuator { get; init; }
+    public Organizer Organizer { get; init; }
 
     public readonly WindowSystem WindowSystem = new("MarketHelper");
     private ConfigWindow ConfigWindow { get; init; }
@@ -44,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         Scanner = new InventoryScanner(Store);
         Universalis = new UniversalisClient();
         Valuator = new Valuator(Universalis);
+        Organizer = new Organizer(Valuator);
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);

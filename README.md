@@ -6,7 +6,11 @@ A personal Dalamud plugin for FINAL FANTASY XIV that:
 - organizes retainer inventories by rules you set, across all your characters
 - lists and reprices retainer market items in batches, at the lowest price minus your undercut, with random delays between actions
 
-Status: inventory tracking and valuation work. Retainer organizing and batch listing are next.
+Status: valuation and retainer organizing work. Batch listing is next.
+
+## Retainer organizing
+
+On the Retainers tab, pick a retainer and add the item categories it should hold, and mark one retainer as the catch-all for everything else. The Moves list shows what belongs elsewhere, including trades between characters. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
 ## Valuation
 

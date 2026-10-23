@@ -10,6 +10,7 @@ public class MainWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
     private readonly ValuationTab valuationTab;
+    private readonly RetainersTab retainersTab;
 
     public MainWindow(Plugin plugin) : base("Market Helper###MarketHelperMain")
     {
@@ -21,6 +22,7 @@ public class MainWindow : Window, IDisposable
 
         this.plugin = plugin;
         valuationTab = new ValuationTab(plugin);
+        retainersTab = new RetainersTab(plugin);
     }
 
     public void Dispose() { }
@@ -49,7 +51,7 @@ public class MainWindow : Window, IDisposable
         using (var tab = ImRaii.TabItem("Retainers"))
         {
             if (tab.Success)
-                ImGui.TextWrapped("Coming in step 3: rules for which retainer holds what, and a move list.");
+                retainersTab.Draw();
         }
 
         using (var tab = ImRaii.TabItem("Listing"))

@@ -178,6 +178,15 @@ public sealed unsafe class InventoryScanner : IDisposable
                           p.First.IsHq == p.Second.IsHq &&
                           p.First.Quantity == p.Second.Quantity);
 
+    // The retainer whose inventory or sell list is open right now, or 0
+    public static ulong OpenRetainerId()
+    {
+        if (!IsRetainerInventoryOpen())
+            return 0;
+        var retainer = RetainerManager.Instance()->GetActiveRetainer();
+        return retainer == null ? 0 : retainer->RetainerId;
+    }
+
     private static bool IsLoaded(GameInventoryType type)
     {
         var container = InventoryManager.Instance()->GetInventoryContainer((InventoryType)type);

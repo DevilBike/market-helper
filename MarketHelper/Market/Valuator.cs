@@ -14,7 +14,7 @@ public enum Verdict
     Pending,
 }
 
-public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable);
+public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory);
 
 public record ValuationRow(
     CharacterRecord Character,
@@ -48,9 +48,9 @@ public class Valuator
             return info;
 
         if (Plugin.DataManager.GetExcelSheet<LuminaItem>().TryGetRow(id, out var row))
-            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable);
+            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId);
         else
-            info = new ItemInfo(id, $"Unknown item {id}", 0, false, true);
+            info = new ItemInfo(id, $"Unknown item {id}", 0, false, true, 0);
 
         items[id] = info;
         return info;
