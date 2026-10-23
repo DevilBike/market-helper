@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.1.0.0</Version>
+    <Author>DevilBike</Author>
+    <Name>Market Helper</Name>
+    <Punchline>Find what's worth selling, organize retainers, and list in batches.</Punchline>
+    <Description>Values your inventory and retainers with market board data, sorts items into sell, vendor and keep, organizes retainers by your rules, and lists items in batches.</Description>
+    <RepoUrl>https://github.com/DevilBike/market-helper</RepoUrl>
+    <Tags>market;retainer;inventory</Tags>
+  </PropertyGroup>
+</Project>
