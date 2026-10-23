@@ -14,7 +14,16 @@ public enum Verdict
     Pending,
 }
 
-public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory);
+public enum ItemGroup
+{
+    None,
+    Consumables,
+    CraftingMaterials,
+    Equipment,
+    Tokens,
+}
+
+public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory, ItemGroup Group);
 
 public record ValuationRow(
     CharacterRecord Character,
@@ -48,9 +57,14 @@ public class Valuator
             return info;
 
         if (Plugin.DataManager.GetExcelSheet<LuminaItem>().TryGetRow(id, out var row))
-            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId);
+        {
+            var group = ItemGroups.Classify(row.ItemUICategory.RowId, row.EquipSlotCategory.RowId != 0, row.IsUntradable);
+            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId, group);
+        }
         else
-            info = new ItemInfo(id, $"Unknown item {id}", 0, false, true, 0);
+        {
+            info = new ItemInfo(id, $"Unknown item {id}", 0, false, true, 0, ItemGroup.None);
+        }
 
         items[id] = info;
         return info;

@@ -1,6 +1,7 @@
 using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
+using MarketHelper.Market;
 
 namespace MarketHelper;
 
@@ -51,6 +52,7 @@ public class Configuration : IPluginConfiguration
 public class RetainerRule
 {
     public ulong RetainerId { get; set; }
+    public HashSet<ItemGroup> Groups { get; set; } = new();
     public HashSet<uint> UiCategories { get; set; } = new();
     public HashSet<uint> ItemIds { get; set; } = new();
 }
