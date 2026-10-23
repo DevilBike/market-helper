@@ -25,6 +25,7 @@ public class Configuration : IPluginConfiguration
 
     // Listing
     public int UndercutAmount { get; set; } = 1;
+    public float MinPriceRatio { get; set; } = 0.5f;
     public int MinActionDelayMs { get; set; } = 800;
     public int MaxActionDelayMs { get; set; } = 2500;
 

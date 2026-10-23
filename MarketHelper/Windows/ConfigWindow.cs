@@ -76,6 +76,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var ratio = configuration.MinPriceRatio * 100f;
+        if (ImGui.SliderFloat("Skip if below % of average", ref ratio, 0f, 100f, "%.0f%%"))
+        {
+            configuration.MinPriceRatio = ratio / 100f;
+            configuration.Save();
+        }
+
         // Each listing action waits a random time between these two values
         var minDelay = configuration.MinActionDelayMs;
         if (ImGui.SliderInt("Min delay (ms)", ref minDelay, 200, 10000))

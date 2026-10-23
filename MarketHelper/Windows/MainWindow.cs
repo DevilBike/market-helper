@@ -11,6 +11,7 @@ public class MainWindow : Window, IDisposable
     private readonly Plugin plugin;
     private readonly ValuationTab valuationTab;
     private readonly RetainersTab retainersTab;
+    private readonly ListingTab listingTab;
 
     public MainWindow(Plugin plugin) : base("Market Helper###MarketHelperMain")
     {
@@ -23,6 +24,7 @@ public class MainWindow : Window, IDisposable
         this.plugin = plugin;
         valuationTab = new ValuationTab(plugin);
         retainersTab = new RetainersTab(plugin);
+        listingTab = new ListingTab(plugin);
     }
 
     public void Dispose() { }
@@ -57,7 +59,7 @@ public class MainWindow : Window, IDisposable
         using (var tab = ImRaii.TabItem("Listing"))
         {
             if (tab.Success)
-                ImGui.TextWrapped("Coming in step 4: batch listing and repricing at the current lowest price minus your undercut.");
+                listingTab.Draw();
         }
     }
 }

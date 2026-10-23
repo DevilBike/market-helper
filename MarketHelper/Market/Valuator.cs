@@ -87,7 +87,7 @@ public class Valuator
                 foreach (var group in groups)
                 {
                     var quantity = group.Sum(s => s.Quantity);
-                    rows.Add(Evaluate(character, location, GetItem(group.Key.ItemId), group.Key.IsHq, quantity, config));
+                    rows.Add(EvaluateStack(character, location, GetItem(group.Key.ItemId), group.Key.IsHq, quantity, config));
                 }
             }
         }
@@ -95,7 +95,7 @@ public class Valuator
         return rows;
     }
 
-    private ValuationRow Evaluate(CharacterRecord character, Location location, ItemInfo item, bool hq, int quantity, Configuration config)
+    public ValuationRow EvaluateStack(CharacterRecord character, Location location, ItemInfo item, bool hq, int quantity, Configuration config)
     {
         ValuationRow Row(double price, double velocity, Verdict verdict, string reason) =>
             new(character, location, item, hq, quantity, price, velocity, verdict, reason);

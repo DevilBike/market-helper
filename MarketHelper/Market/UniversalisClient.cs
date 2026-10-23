@@ -32,6 +32,8 @@ public class MarketData
     }
 
     public double SalesPerDay(bool hq) => hq ? HqSaleVelocity : NqSaleVelocity;
+
+    public double AveragePrice(bool hq) => hq ? AveragePriceHq : AveragePriceNq;
 }
 
 // Prices from universalis.app, cached per world.

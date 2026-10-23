@@ -4,6 +4,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using MarketHelper.Inventory;
+using MarketHelper.Listing;
 using MarketHelper.Market;
 using MarketHelper.Organizing;
 using MarketHelper.Windows;
@@ -21,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+    [PluginService] internal static IMarketBoard MarketBoard { get; private set; } = null!;
 
     internal static Plugin Instance { get; private set; } = null!;
 
@@ -32,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     public UniversalisClient Universalis { get; init; }
     public Valuator Valuator { get; init; }
     public Organizer Organizer { get; init; }
+    public Lister Lister { get; init; }
 
     public readonly WindowSystem WindowSystem = new("MarketHelper");
     private ConfigWindow ConfigWindow { get; init; }
@@ -47,6 +50,7 @@ public sealed class Plugin : IDalamudPlugin
         Universalis = new UniversalisClient();
         Valuator = new Valuator(Universalis);
         Organizer = new Organizer(Valuator);
+        Lister = new Lister(this);
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
@@ -79,6 +83,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.RemoveHandler(CommandName);
 
+        Lister.Dispose();
         Scanner.Dispose();
         Universalis.Dispose();
     }
