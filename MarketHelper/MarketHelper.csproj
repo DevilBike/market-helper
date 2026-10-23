@@ -8,5 +8,6 @@
     <Description>Values your inventory and retainers with market board data, sorts items into sell, vendor and keep, organizes retainers by your rules, and lists items in batches.</Description>
     <RepoUrl>https://github.com/DevilBike/market-helper</RepoUrl>
     <Tags>market;retainer;inventory</Tags>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 </Project>

@@ -9,16 +9,18 @@ namespace MarketHelper.Windows;
 public class MainWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
+    private readonly ValuationTab valuationTab;
 
     public MainWindow(Plugin plugin) : base("Market Helper###MarketHelperMain")
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(420, 300),
+            MinimumSize = new Vector2(700, 400),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
         this.plugin = plugin;
+        valuationTab = new ValuationTab(plugin);
     }
 
     public void Dispose() { }
@@ -41,7 +43,7 @@ public class MainWindow : Window, IDisposable
         using (var tab = ImRaii.TabItem("Valuation"))
         {
             if (tab.Success)
-                ImGui.TextWrapped("Coming in step 2: every item across your characters and retainers, sorted into Sell on MB, Vendor and Keep.");
+                valuationTab.Draw();
         }
 
         using (var tab = ImRaii.TabItem("Retainers"))

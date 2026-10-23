@@ -1,5 +1,6 @@
 using Dalamud.Configuration;
 using System;
+using System.Collections.Generic;
 
 namespace MarketHelper;
 
@@ -11,6 +12,12 @@ public class Configuration : IPluginConfiguration
     // Valuation thresholds
     public int MinMarketValue { get; set; } = 1000;
     public float MinSalesPerDay { get; set; } = 0.5f;
+    public bool VendorUntradables { get; set; } = false;
+    public HashSet<uint> KeepItemIds { get; set; } = new();
+    public int PriceCacheMinutes { get; set; } = 30;
+
+    // Scanning
+    public bool IncludeArmory { get; set; } = false;
 
     // Listing
     public int UndercutAmount { get; set; } = 1;

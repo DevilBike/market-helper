@@ -1,20 +1,24 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using MarketHelper.Inventory;
 
 namespace MarketHelper.Windows;
 
 public class ConfigWindow : Window, IDisposable
 {
+    private readonly Plugin plugin;
     private readonly Configuration configuration;
 
     public ConfigWindow(Plugin plugin) : base("Market Helper Settings###MarketHelperConfig")
     {
         Flags = ImGuiWindowFlags.NoCollapse;
-        Size = new Vector2(380, 260);
+        Size = new Vector2(420, 420);
         SizeCondition = ImGuiCond.FirstUseEver;
 
+        this.plugin = plugin;
         configuration = plugin.Configuration;
     }
 
@@ -36,6 +40,28 @@ public class ConfigWindow : Window, IDisposable
         if (ImGui.InputFloat("Min sales per day", ref minSales, 0.1f, 1f, "%.1f"))
         {
             configuration.MinSalesPerDay = Math.Max(0f, minSales);
+            configuration.Save();
+        }
+
+        var vendorUntradables = configuration.VendorUntradables;
+        if (ImGui.Checkbox("Mark untradable items with a vendor price as Vendor", ref vendorUntradables))
+        {
+            configuration.VendorUntradables = vendorUntradables;
+            configuration.Save();
+        }
+
+        var includeArmory = configuration.IncludeArmory;
+        if (ImGui.Checkbox("Include the armory chest", ref includeArmory))
+        {
+            configuration.IncludeArmory = includeArmory;
+            configuration.Save();
+            plugin.Scanner.RequestScan();
+        }
+
+        var cacheMinutes = configuration.PriceCacheMinutes;
+        if (ImGui.SliderInt("Refresh prices after (min)", ref cacheMinutes, 5, 240))
+        {
+            configuration.PriceCacheMinutes = cacheMinutes;
             configuration.Save();
         }
 
@@ -66,5 +92,22 @@ public class ConfigWindow : Window, IDisposable
             configuration.MinActionDelayMs = Math.Min(maxDelay, configuration.MinActionDelayMs);
             configuration.Save();
         }
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Recorded characters");
+        ImGui.Separator();
+
+        ulong? forget = null;
+        foreach (var character in plugin.Store.Characters.Values.OrderBy(c => c.Name))
+        {
+            var retainers = character.Locations.Values.Count(l => l.Kind == LocationKind.Retainer);
+            ImGui.TextUnformatted($"{character.Name} ({character.World}), {retainers} retainers");
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"Forget##{character.ContentId}"))
+                forget = character.ContentId;
+        }
+
+        if (forget is { } id)
+            plugin.Store.Remove(id);
     }
 }

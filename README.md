@@ -6,7 +6,13 @@ A personal Dalamud plugin for FINAL FANTASY XIV that:
 - organizes retainer inventories by rules you set, across all your characters
 - lists and reprices retainer market items in batches, at the lowest price minus your undercut, with random delays between actions
 
-Status: skeleton only. Features arrive step by step.
+Status: inventory tracking and valuation work. Retainer organizing and batch listing are next.
+
+## Valuation
+
+Your bags and saddlebags are recorded whenever they change. Open each retainer's inventory once to record it; this works on every character you log into. Prices come from [Universalis](https://universalis.app) for each character's home world.
+
+An item is **Sell on MB** when its stack is worth at least the minimum value in settings, it sells at least the minimum times per day, and the market pays more than a vendor. Otherwise it is **Vendor** if a vendor buys it, or **Keep**. Right-click an item to always keep it.
 
 ## Install
 
