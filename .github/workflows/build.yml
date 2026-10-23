@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    env:
+      PLUGIN_VERSION: 0.1.${{ github.run_number }}.0
+      RELEASE_TAG: v0.1.${{ github.run_number }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Download Dalamud
+      run: |
+        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
+        Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+    - name: Build
+      run: dotnet build --configuration Release -p:Version=${{ env.PLUGIN_VERSION }}
+
+    # Turns the manifest DalamudPackager produced into a custom plugin repo
+    # that XIVLauncher reads from the latest release.
+    - name: Make repo.json
+      run: |
+        $out = ".\MarketHelper\bin\x64\Release\MarketHelper"
+        $manifest = Get-Content "$out\MarketHelper.json" -Raw | ConvertFrom-Json
+        $zip = "https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/latest.zip"
+        $manifest | Add-Member -Force DownloadLinkInstall $zip
+        $manifest | Add-Member -Force DownloadLinkUpdate $zip
+        $manifest | Add-Member -Force DownloadLinkTesting $zip
+        $manifest | Add-Member -Force LastUpdate ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+        ConvertTo-Json @($manifest) -Depth 5 | Set-Content "$out\repo.json"
+        Get-Content "$out\repo.json"
+
+    - name: Store artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: MarketHelper
+        path: .\MarketHelper\bin\x64\Release\MarketHelper\*
+        if-no-files-found: error
+
+    - name: Publish release
+      if: github.event_name != 'pull_request'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: Market Helper ${{ env.PLUGIN_VERSION }}
+        make_latest: true
+        files: |
+          MarketHelper/bin/x64/Release/MarketHelper/latest.zip
+          MarketHelper/bin/x64/Release/MarketHelper/repo.json
