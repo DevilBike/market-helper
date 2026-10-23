@@ -7,6 +7,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using ItemUICategory = Lumina.Excel.Sheets.ItemUICategory;
 using MarketHelper.Inventory;
+using MarketHelper.Market;
 using MarketHelper.Organizing;
 
 namespace MarketHelper.Windows;
@@ -167,7 +168,28 @@ public class RetainersTab
         var rule = config.GetRule(current.Id);
 
         ImGui.Spacing();
-        ImGui.TextUnformatted("Categories stored here");
+        ImGui.TextUnformatted("Groups stored here (tick as many as you like)");
+        ImGui.Separator();
+        foreach (var group in ItemGroups.All)
+        {
+            var owner = config.RetainerRules.Find(r => r.Groups.Contains(group));
+            var here = owner?.RetainerId == current.Id;
+            var elsewhere = owner != null && !here
+                ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
+                : "";
+            if (ImGui.Checkbox($"{ItemGroups.Label(group)}{elsewhere}##group{group}", ref here))
+            {
+                // A group lives in one retainer only
+                foreach (var other in config.RetainerRules)
+                    other.Groups.Remove(group);
+                if (here)
+                    rule.Groups.Add(group);
+                Save();
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Categories stored here (for what's left over, or to split a group)");
         ImGui.Separator();
         uint? removeCategory = null;
         foreach (var id in rule.UiCategories)
@@ -197,9 +219,10 @@ public class RetainersTab
                         continue;
 
                     var owner = config.RetainerRules.Find(r => r.UiCategories.Contains(id));
+                    var group = ItemGroups.GroupOfCategory(id, name);
                     var suffix = owner != null && owner.RetainerId != current.Id
                         ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
-                        : "";
+                        : group != ItemGroup.None ? $" (in {ItemGroups.Label(group)})" : "";
                     if (ImGui.Selectable($"{name}{suffix}##addcat{id}", rule.UiCategories.Contains(id)))
                     {
                         // A category lives in one retainer only

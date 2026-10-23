@@ -40,7 +40,7 @@ public class Organizer
             .OrderBy(r => r.Owner.Name).ThenBy(r => r.Name)
             .ToList();
 
-    // Item rules beat category rules, which beat the catch-all retainer
+    // Most specific wins: single item, then category, then broad group, then the catch-all
     public static ulong TargetFor(ItemInfo item, Configuration config)
     {
         foreach (var rule in config.RetainerRules)
@@ -53,6 +53,15 @@ public class Organizer
         {
             if (rule.UiCategories.Contains(item.UiCategory))
                 return rule.RetainerId;
+        }
+
+        if (item.Group != ItemGroup.None)
+        {
+            foreach (var rule in config.RetainerRules)
+            {
+                if (rule.Groups.Contains(item.Group))
+                    return rule.RetainerId;
+            }
         }
 
         return config.CatchAllRetainerId;

@@ -10,7 +10,7 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 ## Retainer organizing
 
-On the Retainers tab, pick a retainer and add the item categories it should hold, and mark one retainer as the catch-all for everything else. The Moves list shows what belongs elsewhere, including trades between characters. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer as the catch-all. The most specific rule wins: a single item, then a category, then a group, then the catch-all. The Moves list shows what belongs elsewhere, including trades between characters. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
 ## Valuation
 
