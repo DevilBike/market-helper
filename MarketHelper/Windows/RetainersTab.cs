@@ -25,8 +25,13 @@ public class RetainersTab
     private MovePlan plan = new(new List<Move>(), new Dictionary<ulong, int>());
     private DateTime nextRefresh = DateTime.MinValue;
 
+    private static readonly string[] MoveFilters = ["All moves", "Between retainers", "From my bags", "Back to my bags", "Trades only"];
+
     private ulong selected;
     private string categorySearch = string.Empty;
+    private string retainerSearch = string.Empty;
+    private string moveSearch = string.Empty;
+    private int moveFilter;
 
     public RetainersTab(Plugin plugin)
     {
@@ -51,6 +56,8 @@ public class RetainersTab
             retainers = Organizer.Retainers(plugin.Store.Characters.Values);
             plan = plugin.Organizer.Plan(plugin.Store.Characters.Values, plugin.Configuration);
         }
+
+        DrawTour();
 
         if (retainers.Count == 0)
         {
@@ -77,6 +84,35 @@ public class RetainersTab
                     DrawMoves(plan.Moves);
             }
         }
+    }
+
+    // Opens every retainer's inventory in turn so nobody has to click through them
+    private void DrawTour()
+    {
+        var tour = plugin.RetainerTour;
+        if (tour.IsRunning)
+        {
+            ImGui.TextUnformatted(tour.Status);
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Stop##tour"))
+                tour.Stop();
+            return;
+        }
+
+        if (RetainerTour.CanStart)
+        {
+            if (ImGui.Button("Check all retainers"))
+                tour.Start();
+            ImGui.SameLine();
+            ImGui.TextDisabled("Opens each retainer's inventory in turn to record it.");
+        }
+        else
+        {
+            ImGui.TextDisabled("At a summoning bell, a button here checks every retainer for you.");
+        }
+
+        if (tour.Status.Length > 0)
+            ImGui.TextUnformatted(tour.Status);
     }
 
     // While a retainer is open, show exactly what to take out of it and put into it
@@ -123,8 +159,13 @@ public class RetainersTab
         {
             if (list.Success)
             {
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputTextWithHint("##retainersearch", "Search", ref retainerSearch, 50);
                 foreach (var retainer in retainers)
                 {
+                    if (retainerSearch.Length > 0 && !retainer.Label.Contains(retainerSearch, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
                     var stacks = plan.StacksAfter.GetValueOrDefault(retainer.Id, retainer.Location.Items.Count);
                     var catchAll = config.CatchAllRetainerId == retainer.Id ? " *" : "";
                     var unscanned = retainer.Scanned ? "" : " (not opened yet)";
@@ -168,9 +209,19 @@ public class RetainersTab
 
         var rule = config.GetRule(current.Id);
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Groups stored here (tick as many as you like)");
-        ImGui.Separator();
+        if (ImGui.CollapsingHeader($"Groups stored here ({rule.Groups.Count})###rulegroups"))
+            DrawRuleGroups(config, current, rule);
+
+        if (ImGui.CollapsingHeader($"Categories stored here ({rule.UiCategories.Count})###rulecategories"))
+            DrawRuleCategories(config, current, rule);
+
+        if (ImGui.CollapsingHeader($"Single items stored here ({rule.ItemIds.Count})###ruleitems"))
+            DrawRuleItems(rule);
+    }
+
+    private void DrawRuleGroups(Configuration config, RetainerRef current, RetainerRule rule)
+    {
+        ImGui.TextDisabled("Tick as many as you like.");
         foreach (var group in ItemGroups.All)
         {
             var owner = config.RetainerRules.Find(r => r.Groups.Contains(group));
@@ -188,10 +239,11 @@ public class RetainersTab
                 Save();
             }
         }
+    }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Categories stored here (for what's left over, or to split a group)");
-        ImGui.Separator();
+    private void DrawRuleCategories(Configuration config, RetainerRef current, RetainerRule rule)
+    {
+        ImGui.TextDisabled("For what's left over, or to split a group.");
         uint? removeCategory = null;
         foreach (var id in rule.UiCategories)
         {
@@ -235,10 +287,10 @@ public class RetainersTab
                 }
             }
         }
+    }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Single items stored here");
-        ImGui.Separator();
+    private void DrawRuleItems(RetainerRule rule)
+    {
         if (rule.ItemIds.Count == 0)
             ImGui.TextWrapped("Right-click an item in the Moves list to send it to a specific retainer.");
 
@@ -269,6 +321,29 @@ public class RetainersTab
         var trades = moves.Count(m => m.NeedsTrade);
         if (trades > 0)
             ImGui.TextWrapped($"{trades} moves go to another character's retainer. Withdraw them, then trade them over with both characters on the same world.");
+
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("##movesearch", "Search items or retainers", ref moveSearch, 100);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(160 * ImGuiHelpers.GlobalScale);
+        ImGui.Combo("##movefilter", ref moveFilter, (ReadOnlySpan<string>)MoveFilters, MoveFilters.Length);
+
+        moves = moves.Where(m => moveFilter switch
+            {
+                1 => !m.From.IsBags && !m.To.IsBags,
+                2 => m.From.IsBags,
+                3 => m.To.IsBags,
+                4 => m.NeedsTrade,
+                _ => true,
+            })
+            .Where(m => moveSearch.Length == 0 ||
+                        m.Item.Name.Contains(moveSearch, StringComparison.OrdinalIgnoreCase) ||
+                        m.From.Label.Contains(moveSearch, StringComparison.OrdinalIgnoreCase) ||
+                        m.To.Label.Contains(moveSearch, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (moves.Count == 0)
+            ImGui.TextDisabled("No moves match.");
 
         var index = 0;
         foreach (var group in moves.GroupBy(m => (m.From.Key, m.To.Key)).OrderBy(g => g.First().From.Label))

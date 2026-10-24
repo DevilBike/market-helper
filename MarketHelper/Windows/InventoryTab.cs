@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using MarketHelper.Inventory;
 using MarketHelper.Market;
@@ -9,8 +12,12 @@ namespace MarketHelper.Windows;
 
 public class InventoryTab
 {
+    private static readonly string[] SortNames = ["Name", "Group", "Quantity", "Kept first"];
+
     private readonly Plugin plugin;
-    private string search = string.Empty;
+    private string bagSearch = string.Empty;
+    private string armorySearch = string.Empty;
+    private int bagSort;
 
     public InventoryTab(Plugin plugin)
     {
@@ -49,48 +56,37 @@ public class InventoryTab
             Config.Save();
         }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Groups to keep on me");
-        ImGui.Separator();
-        foreach (var group in ItemGroups.All)
+        if (ImGui.CollapsingHeader($"Groups to keep on me ({Config.CarryGroups.Count})###carrygroups"))
         {
-            var carried = Config.CarryGroups.Contains(group);
-            if (ImGui.Checkbox($"{ItemGroups.Label(group)}##carry{group}", ref carried))
+            foreach (var group in ItemGroups.All)
             {
-                if (carried)
-                    Config.CarryGroups.Add(group);
-                else
-                    Config.CarryGroups.Remove(group);
-                Config.Save();
+                var carried = Config.CarryGroups.Contains(group);
+                if (ImGui.Checkbox($"{ItemGroups.Label(group)}##carry{group}", ref carried))
+                {
+                    if (carried)
+                        Config.CarryGroups.Add(group);
+                    else
+                        Config.CarryGroups.Remove(group);
+                    Config.Save();
+                }
             }
         }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Single items to keep on me");
-        ImGui.Separator();
-        uint? remove = null;
-        foreach (var id in Config.CarryItemIds.OrderBy(id => plugin.Valuator.GetItem(id).Name))
+        if (ImGui.CollapsingHeader($"Single items to keep on me ({Config.CarryItemIds.Count})###carryitems"))
         {
-            if (ImGui.SmallButton($"Remove##carry{id}"))
-                remove = id;
-            ImGui.SameLine();
-            ImGui.TextUnformatted(plugin.Valuator.GetItem(id).Name);
+            if (DrawRemovableList(Config.CarryItemIds, "carry"))
+                Config.Save();
+
+            if (Config.CarryItemIds.Count == 0)
+                ImGui.TextDisabled("None yet. Tick items in your bags below, or right-click an item on the Valuation or Moves list.");
         }
 
-        if (remove is { } removed)
-        {
-            Config.CarryItemIds.Remove(removed);
-            Config.Save();
-        }
+        if (ImGui.CollapsingHeader("In your bags now", ImGuiTreeNodeFlags.DefaultOpen))
+            DrawBags();
+    }
 
-        if (Config.CarryItemIds.Count == 0)
-            ImGui.TextDisabled("None yet. Tick items in your bags below, or right-click an item on the Valuation or Moves list.");
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("In your bags now");
-        ImGui.Separator();
-        ImGui.InputTextWithHint("##bagsearch", "Search", ref search, 100);
-
+    private void DrawBags()
+    {
         var player = Plugin.PlayerState;
         if (!plugin.Store.Characters.TryGetValue(player.ContentId, out var character) ||
             !character.Locations.TryGetValue(CharacterRecord.LocationKey(LocationKind.Bags), out var bags))
@@ -99,24 +95,39 @@ public class InventoryTab
             return;
         }
 
-        using var child = ImRaii.Child("bagitems");
-        foreach (var id in bags.Items.Select(s => s.ItemId).Distinct())
-        {
-            var item = plugin.Valuator.GetItem(id);
-            if (search.Length > 0 && !item.Name.Contains(search, System.StringComparison.OrdinalIgnoreCase))
-                continue;
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("##bagsearch", "Search", ref bagSearch, 100);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(130 * ImGuiHelpers.GlobalScale);
+        ImGui.Combo("Sort by##bagsort", ref bagSort, (ReadOnlySpan<string>)SortNames, SortNames.Length);
 
+        var rows = bags.Items
+            .GroupBy(s => s.ItemId)
+            .Select(g => (Item: plugin.Valuator.GetItem(g.Key), Quantity: g.Sum(s => s.Quantity)))
+            .Where(r => bagSearch.Length == 0 || r.Item.Name.Contains(bagSearch, StringComparison.OrdinalIgnoreCase));
+
+        rows = bagSort switch
+        {
+            1 => rows.OrderBy(r => r.Item.Group == ItemGroup.None ? "~" : ItemGroups.Label(r.Item.Group)).ThenBy(r => r.Item.Name),
+            2 => rows.OrderByDescending(r => r.Quantity).ThenBy(r => r.Item.Name),
+            3 => rows.OrderByDescending(r => Organizer.IsCarried(r.Item, Config)).ThenBy(r => r.Item.Name),
+            _ => rows.OrderBy(r => r.Item.Name),
+        };
+
+        using var child = ImRaii.Child("bagitems");
+        foreach (var (item, quantity) in rows)
+        {
             var byGroup = item.Group != ItemGroup.None && Config.CarryGroups.Contains(item.Group);
             var carried = Organizer.IsCarried(item, Config);
-            var label = byGroup ? $"{item.Name} (kept with {ItemGroups.Label(item.Group)})" : item.Name;
+            var label = $"{item.Name} x{quantity}{(byGroup ? $" (kept with {ItemGroups.Label(item.Group)})" : "")}";
             using (ImRaii.Disabled(byGroup))
             {
-                if (ImGui.Checkbox($"{label}##bag{id}", ref carried))
+                if (ImGui.Checkbox($"{label}##bag{item.Id}", ref carried))
                 {
                     if (carried)
-                        Config.CarryItemIds.Add(id);
+                        Config.CarryItemIds.Add(item.Id);
                     else
-                        Config.CarryItemIds.Remove(id);
+                        Config.CarryItemIds.Remove(item.Id);
                     Config.Save();
                 }
             }
@@ -126,9 +137,9 @@ public class InventoryTab
     private void DrawArmory()
     {
         var cleaner = plugin.ArmoryCleaner;
-        ImGui.TextWrapped("Items in your armory chest that none of your gearsets use. Soul crystals are left alone.");
+        ImGui.TextWrapped("Items in your armory chest that none of your gearsets use. Soul crystals and items you keep in the armory are left alone.");
 
-        var unused = ArmoryCleaner.Unused();
+        var unused = ArmoryCleaner.Unused(Config.ArmoryKeepIds);
         var free = ArmoryCleaner.FreeBagSlots();
         ImGui.TextUnformatted($"{unused.Count} items not in a gearset. {free} free slots in your bags.");
 
@@ -141,7 +152,7 @@ public class InventoryTab
         {
             using (ImRaii.Disabled(unused.Count == 0 || free == 0))
             {
-                var count = System.Math.Min(unused.Count, free);
+                var count = Math.Min(unused.Count, free);
                 if (ImGui.Button($"Move {count} to my bags"))
                     cleaner.MoveToBags(unused.Take(count));
             }
@@ -150,12 +161,55 @@ public class InventoryTab
         if (cleaner.Status.Length > 0)
             ImGui.TextUnformatted(cleaner.Status);
 
-        ImGui.Separator();
+        if (ImGui.CollapsingHeader($"Kept in the armory ({Config.ArmoryKeepIds.Count})###armorykeep"))
+        {
+            if (DrawRemovableList(Config.ArmoryKeepIds, "armorykeep"))
+                Config.Save();
+
+            if (Config.ArmoryKeepIds.Count == 0)
+                ImGui.TextDisabled("None yet. Right-click an item below to keep it in the armory.");
+        }
+
+        if (!ImGui.CollapsingHeader("To move", ImGuiTreeNodeFlags.DefaultOpen))
+            return;
+
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("##armorysearch", "Search", ref armorySearch, 100);
+
         using var child = ImRaii.Child("armoryitems");
+        var index = 0;
         foreach (var slot in unused)
         {
             var name = plugin.Valuator.GetItem(slot.ItemId).Name;
-            ImGui.BulletText(slot.IsHq ? $"{name} (HQ)" : name);
+            if (armorySearch.Length > 0 && !name.Contains(armorySearch, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            index++;
+            ImGui.Selectable($"{name}{(slot.IsHq ? " (HQ)" : "")}##armory{index}");
+            using var popup = ImRaii.ContextPopupItem($"armorymenu{index}");
+            if (popup.Success && ImGui.Selectable("Keep this in the armory"))
+            {
+                Config.ArmoryKeepIds.Add(slot.ItemId);
+                Config.Save();
+            }
         }
+
+        if (index == 0)
+            ImGui.TextDisabled("Nothing to move.");
+    }
+
+    // Item names with a Remove button each; true when one was removed
+    private bool DrawRemovableList(HashSet<uint> ids, string idPrefix)
+    {
+        uint? remove = null;
+        foreach (var id in ids.OrderBy(id => plugin.Valuator.GetItem(id).Name))
+        {
+            if (ImGui.SmallButton($"Remove##{idPrefix}{id}"))
+                remove = id;
+            ImGui.SameLine();
+            ImGui.TextUnformatted(plugin.Valuator.GetItem(id).Name);
+        }
+
+        return remove is { } removed && ids.Remove(removed);
     }
 }

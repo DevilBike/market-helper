@@ -20,6 +20,7 @@ public class ListingTab
     private readonly HashSet<(Dalamud.Game.Inventory.GameInventoryType, int)> deselected = new();
     private DateTime nextBagRefresh = DateTime.MinValue;
     private bool showAllTradable;
+    private string search = string.Empty;
 
     public ListingTab(Plugin plugin)
     {
@@ -77,8 +78,15 @@ public class ListingTab
         ImGui.TextUnformatted("List from your bags");
         ImGui.Separator();
         ImGui.Checkbox("Show every tradable item, not just Sell on MB", ref showAllTradable);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(200 * Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("##listsearch", "Search", ref search, 100);
 
-        var shown = candidates.Where(c => showAllTradable || c.Row.Verdict == Verdict.Sell).ToList();
+        // Only what's shown gets listed, so a search narrows the batch too
+        var shown = candidates
+            .Where(c => showAllTradable || c.Row.Verdict == Verdict.Sell)
+            .Where(c => search.Length == 0 || c.Row.Item.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
         if (shown.Count == 0)
         {
             ImGui.TextWrapped("Nothing in your bags is marked Sell on MB. Withdraw items from your retainers first, or tick the box above.");

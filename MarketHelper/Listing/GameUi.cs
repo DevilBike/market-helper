@@ -1,4 +1,5 @@
 using Dalamud.Memory;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace MarketHelper.Listing;
@@ -65,4 +66,44 @@ public static unsafe class GameUi
     }
 
     public static void SelectContextEntry(AtkUnitBase* menu, int index) => Fire(menu, true, 0, index, 0);
+
+    // SelectString lists choices like "Entrust or withdraw items."; matched by how the text starts
+    public static int FindSelectStringEntry(AtkUnitBase* addon, string text)
+    {
+        var select = (AddonSelectString*)addon;
+        for (var i = 0; i < select->PopupMenu.PopupMenu.EntryCount; i++)
+        {
+            var entry = MemoryHelper.ReadSeStringNullTerminated((nint)select->PopupMenu.PopupMenu.EntryNames[i].Value).TextValue;
+            if (entry.StartsWith(text, System.StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    // Advances a speech bubble, like clicking on it
+    public static void ClickTalk(AtkUnitBase* addon)
+    {
+        var evt = stackalloc AtkEvent[1];
+        evt->Listener = (AtkEventListener*)addon;
+        evt->Target = &AtkStage.Instance()->AtkEventTarget;
+        evt->State.StateFlags = (AtkEventStateFlags)132;
+        var data = stackalloc AtkEventData[1];
+        addon->ReceiveEvent(AtkEventType.MouseDown, 0, evt, data);
+        addon->ReceiveEvent(AtkEventType.MouseClick, 0, evt, data);
+        addon->ReceiveEvent(AtkEventType.MouseUp, 0, evt, data);
+    }
+
+    // RetainerList: picking a row sends 2, the row, then two empty values
+    public static void SelectRetainer(AtkUnitBase* list, int index)
+    {
+        var values = stackalloc AtkValue[4];
+        values[0].Type = AtkValueType.Int;
+        values[0].Int = 2;
+        values[1].Type = AtkValueType.UInt;
+        values[1].UInt = (uint)index;
+        values[2].Type = 0;
+        values[3].Type = 0;
+        list->FireCallback(4, values, true);
+    }
 }
