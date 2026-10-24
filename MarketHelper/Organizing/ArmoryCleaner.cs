@@ -64,9 +64,10 @@ public sealed unsafe class ArmoryCleaner : IDisposable
         return ids;
     }
 
-    public static List<BagSlot> Unused()
+    public static List<BagSlot> Unused(ICollection<uint> keep)
     {
         var inGearsets = GearsetItemIds();
+        inGearsets.UnionWith(keep);
         var slots = new List<BagSlot>();
         foreach (var container in Armory)
         {

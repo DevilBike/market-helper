@@ -10,13 +10,15 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 ## Retainer organizing
 
-On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer as the catch-all. The most specific rule wins: a single item, then a category, then a group, then the catch-all. The Moves list shows what belongs elsewhere, including trades between characters. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer as the catch-all. The most specific rule wins: a single item, then a category, then a group, then the catch-all. The Moves list shows what belongs elsewhere, including trades between characters, and can be searched and filtered (between retainers, from or back to your bags, trades). While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+
+At a summoning bell, **Check all retainers** opens each retainer's inventory in turn and records it, clicking through the greetings for you, with the same random delays as listing.
 
 ## Inventory
 
-**Keep on me** lists the groups and single items that should stay in your bags. Everything else in your bags shows up in Retainers > Moves going to the retainer its rules name (you can turn that off), and any kept item found in a retainer shows up there to be taken out. Tick items from your bags, or right-click an item on the Valuation or Moves list.
+**Keep on me** lists the groups and single items (in collapsible sections) that should stay in your bags. Everything else in your bags shows up in Retainers > Moves going to the retainer its rules name (you can turn that off), and any kept item found in a retainer shows up there to be taken out. Tick items from your bags (searchable, sorted by name, group, quantity or kept first), or right-click an item on the Valuation or Moves list.
 
-**Armory cleanup** lists items in your armory chest that none of your gearsets use, leaving soul crystals alone, and moves them into free bag slots with one click, with the same random delays as listing.
+**Armory cleanup** lists items in your armory chest that none of your gearsets use, leaving soul crystals and anything you've chosen to keep in the armory alone (right-click an item to keep it there), and moves them into free bag slots with one click, with the same random delays as listing.
 
 ## Valuation
 

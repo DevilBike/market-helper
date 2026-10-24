@@ -70,6 +70,21 @@ public sealed unsafe class InventoryScanner : IDisposable
 
     public void RequestScan() => dirty = true;
 
+    // Records what's open right now instead of waiting for the next tick
+    public void ScanNow()
+    {
+        try
+        {
+            Scan(IsRetainerInventoryOpen());
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Inventory scan failed");
+        }
+    }
+
+    public static bool RetainerPagesLoaded() => IsLoaded(GameInventoryType.RetainerPage1);
+
     private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) => dirty = true;
 
     private void OnLogin() => dirty = true;
@@ -204,7 +219,8 @@ public sealed unsafe class InventoryScanner : IDisposable
 
         var key = CharacterRecord.LocationKey(kind, retainerId);
         if (record.Locations.TryGetValue(key, out var existing) &&
-            existing.RetainerName == retainerName && SameItems(existing.Items, items))
+            existing.RetainerName == retainerName && existing.UpdatedUtc != DateTime.MinValue &&
+            SameItems(existing.Items, items))
             return false;
 
         record.Locations[key] = new Location

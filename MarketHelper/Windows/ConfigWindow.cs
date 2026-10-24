@@ -26,9 +26,18 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        ImGui.TextUnformatted("Valuation");
-        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Valuation", ImGuiTreeNodeFlags.DefaultOpen))
+            DrawValuation();
 
+        if (ImGui.CollapsingHeader("Listing and automation", ImGuiTreeNodeFlags.DefaultOpen))
+            DrawListing();
+
+        if (ImGui.CollapsingHeader("Recorded characters"))
+            DrawCharacters();
+    }
+
+    private void DrawValuation()
+    {
         var minValue = configuration.MinMarketValue;
         if (ImGui.InputInt("Min market value (gil)", ref minValue, 100, 1000))
         {
@@ -71,11 +80,10 @@ public class ConfigWindow : Window, IDisposable
             configuration.PriceCacheMinutes = cacheMinutes;
             configuration.Save();
         }
+    }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Listing");
-        ImGui.Separator();
-
+    private void DrawListing()
+    {
         var undercut = configuration.UndercutAmount;
         if (ImGui.InputInt("Undercut by (gil)", ref undercut))
         {
@@ -90,7 +98,7 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        // Each listing action waits a random time between these two values
+        // Each listing, armory and retainer-check action waits a random time between these two values
         var minDelay = configuration.MinActionDelayMs;
         if (ImGui.SliderInt("Min delay (ms)", ref minDelay, 200, 10000))
         {
@@ -106,11 +114,10 @@ public class ConfigWindow : Window, IDisposable
             configuration.MinActionDelayMs = Math.Min(maxDelay, configuration.MinActionDelayMs);
             configuration.Save();
         }
+    }
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Recorded characters");
-        ImGui.Separator();
-
+    private void DrawCharacters()
+    {
         ulong? forget = null;
         foreach (var character in plugin.Store.Characters.Values.OrderBy(c => c.Name))
         {

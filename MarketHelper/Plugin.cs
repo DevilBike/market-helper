@@ -36,6 +36,7 @@ public sealed class Plugin : IDalamudPlugin
     public Organizer Organizer { get; init; }
     public Lister Lister { get; init; }
     public ArmoryCleaner ArmoryCleaner { get; init; }
+    public RetainerTour RetainerTour { get; init; }
 
     public readonly WindowSystem WindowSystem = new("MarketHelper");
     private ConfigWindow ConfigWindow { get; init; }
@@ -54,6 +55,7 @@ public sealed class Plugin : IDalamudPlugin
         Organizer = new Organizer(Valuator);
         Lister = new Lister(this);
         ArmoryCleaner = new ArmoryCleaner(this);
+        RetainerTour = new RetainerTour(this);
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
@@ -88,6 +90,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Lister.Dispose();
         ArmoryCleaner.Dispose();
+        RetainerTour.Dispose();
         Scanner.Dispose();
         Universalis.Dispose();
     }

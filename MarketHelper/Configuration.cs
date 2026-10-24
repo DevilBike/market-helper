@@ -26,6 +26,9 @@ public class Configuration : IPluginConfiguration
     public HashSet<ItemGroup> CarryGroups { get; set; } = new();
     public bool PlanBagMoves { get; set; } = true;
 
+    // Armory items that stay put even though no gearset uses them
+    public HashSet<uint> ArmoryKeepIds { get; set; } = new();
+
     // Scanning
     public bool IncludeArmory { get; set; } = false;
     public bool DetectRetainers { get; set; } = true;
