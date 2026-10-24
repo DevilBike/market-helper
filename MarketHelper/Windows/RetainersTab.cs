@@ -86,8 +86,8 @@ public class RetainersTab
         if (open == 0)
             return;
 
-        var takeOut = plan.Moves.Where(m => m.From.Id == open).ToList();
-        var putIn = plan.Moves.Where(m => m.To.Id == open && !m.NeedsTrade).ToList();
+        var takeOut = plan.Moves.Where(m => !m.From.IsBags && m.From.Id == open).ToList();
+        var putIn = plan.Moves.Where(m => !m.To.IsBags && m.To.Id == open && !m.NeedsTrade).ToList();
         if (takeOut.Count == 0 && putIn.Count == 0)
         {
             Colored(Highlight, "This retainer is already organized.");
@@ -107,9 +107,9 @@ public class RetainersTab
 
         if (putIn.Count > 0)
         {
-            Colored(Highlight, "Put in (from your bags after taking them out of the others):");
+            Colored(Highlight, "Put in:");
             foreach (var move in putIn)
-                ImGui.BulletText($"{ItemLabel(move)} from {move.From.Name}");
+                ImGui.BulletText($"{ItemLabel(move)} from {move.From.Name}{(move.From.IsBags ? "" : " (withdraw it there first)")}");
         }
 
         ImGui.Separator();
@@ -271,11 +271,11 @@ public class RetainersTab
             ImGui.TextWrapped($"{trades} moves go to another character's retainer. Withdraw them, then trade them over with both characters on the same world.");
 
         var index = 0;
-        foreach (var group in moves.GroupBy(m => (m.From.Id, m.To.Id)).OrderBy(g => g.First().From.Label))
+        foreach (var group in moves.GroupBy(m => (m.From.Key, m.To.Key)).OrderBy(g => g.First().From.Label))
         {
             var first = group.First();
             var header = $"{first.From.Label} → {first.To.Label}{(first.NeedsTrade ? " (trade)" : "")}  [{group.Count()}]";
-            using var node = ImRaii.TreeNode($"{header}##{first.From.Id}-{first.To.Id}");
+            using var node = ImRaii.TreeNode($"{header}##{first.From.Key}-{first.To.Key}");
             if (!node.Success)
                 continue;
 
@@ -306,10 +306,17 @@ public class RetainersTab
             }
         }
 
-        if (ImGui.Selectable("Leave it wherever it is"))
+        if (ImGui.Selectable("Keep it on me"))
+        {
+            plugin.Configuration.CarryItemIds.Add(move.Item.Id);
+            Save();
+        }
+
+        if (!move.From.IsBags && ImGui.Selectable("Leave it wherever it is"))
         {
             foreach (var rule in plugin.Configuration.RetainerRules)
                 rule.ItemIds.Remove(move.Item.Id);
+            plugin.Configuration.CarryItemIds.Remove(move.Item.Id);
             plugin.Configuration.GetRule(move.From.Id).ItemIds.Add(move.Item.Id);
             Save();
         }

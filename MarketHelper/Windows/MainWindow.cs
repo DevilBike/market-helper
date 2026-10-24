@@ -12,6 +12,7 @@ public class MainWindow : Window, IDisposable
     private readonly ValuationTab valuationTab;
     private readonly RetainersTab retainersTab;
     private readonly ListingTab listingTab;
+    private readonly InventoryTab inventoryTab;
 
     public MainWindow(Plugin plugin) : base("Market Helper###MarketHelperMain")
     {
@@ -25,6 +26,7 @@ public class MainWindow : Window, IDisposable
         valuationTab = new ValuationTab(plugin);
         retainersTab = new RetainersTab(plugin);
         listingTab = new ListingTab(plugin);
+        inventoryTab = new InventoryTab(plugin);
     }
 
     public void Dispose() { }
@@ -48,6 +50,12 @@ public class MainWindow : Window, IDisposable
         {
             if (tab.Success)
                 valuationTab.Draw();
+        }
+
+        using (var tab = ImRaii.TabItem("Inventory"))
+        {
+            if (tab.Success)
+                inventoryTab.Draw();
         }
 
         using (var tab = ImRaii.TabItem("Retainers"))
