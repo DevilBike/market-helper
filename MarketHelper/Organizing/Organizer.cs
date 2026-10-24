@@ -5,11 +5,14 @@ using MarketHelper.Market;
 
 namespace MarketHelper.Organizing;
 
+// A place items can be moved between: one of a character's retainers, or their bags
 public record RetainerRef(CharacterRecord Owner, Location Location)
 {
     public ulong Id => Location.RetainerId;
-    public string Name => Location.RetainerName;
-    public string Label => $"{Location.RetainerName} ({Owner.Name})";
+    public bool IsBags => Location.Kind == LocationKind.Bags;
+    public string Name => IsBags ? "your bags" : Location.RetainerName;
+    public string Label => IsBags ? $"Bags ({Owner.Name})" : $"{Location.RetainerName} ({Owner.Name})";
+    public string Key => $"{Owner.ContentId}:{Location.Kind}:{Location.RetainerId}";
     public bool Scanned => Location.UpdatedUtc != System.DateTime.MinValue;
 }
 
@@ -41,6 +44,10 @@ public class Organizer
             .OrderBy(r => r.Owner.Name).ThenBy(r => r.Name)
             .ToList();
 
+    public static bool IsCarried(ItemInfo item, Configuration config) =>
+        config.CarryItemIds.Contains(item.Id) ||
+        (item.Group != ItemGroup.None && config.CarryGroups.Contains(item.Group));
+
     // Most specific wins: single item, then category, then broad group, then the catch-all
     public static ulong TargetFor(ItemInfo item, Configuration config)
     {
@@ -70,15 +77,27 @@ public class Organizer
 
     public MovePlan Plan(IEnumerable<CharacterRecord> characters, Configuration config)
     {
-        var retainers = Retainers(characters);
+        var characterList = characters.ToList();
+        var retainers = Retainers(characterList);
         var byId = retainers.ToDictionary(r => r.Id);
         var moves = new List<Move>();
+
+        // Items on the keep-on-me list come back to their owner's bags
+        RetainerRef BagsOf(CharacterRecord owner) => new(owner,
+            owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(LocationKind.Bags))
+            ?? new Location { Kind = LocationKind.Bags });
 
         foreach (var from in retainers)
         {
             foreach (var group in from.Location.Items.GroupBy(s => (s.ItemId, s.IsHq)))
             {
                 var item = valuator.GetItem(group.Key.ItemId);
+                if (IsCarried(item, config))
+                {
+                    moves.Add(new Move(from, BagsOf(from.Owner), item, group.Key.IsHq, group.Sum(s => s.Quantity)));
+                    continue;
+                }
+
                 var target = TargetFor(item, config);
                 if (target == 0 || target == from.Id || !byId.TryGetValue(target, out var to))
                     continue;
@@ -91,16 +110,42 @@ public class Organizer
             }
         }
 
+        // Everything else in your bags goes to the retainer its rules name
+        if (config.PlanBagMoves)
+        {
+            foreach (var owner in characterList)
+            {
+                if (!owner.Locations.TryGetValue(CharacterRecord.LocationKey(LocationKind.Bags), out var bags))
+                    continue;
+
+                var from = new RetainerRef(owner, bags);
+                foreach (var group in bags.Items.GroupBy(s => (s.ItemId, s.IsHq)))
+                {
+                    var item = valuator.GetItem(group.Key.ItemId);
+                    if (IsCarried(item, config))
+                        continue;
+
+                    var target = TargetFor(item, config);
+                    if (target == 0 || !byId.TryGetValue(target, out var to))
+                        continue;
+                    if (from.Owner.ContentId != to.Owner.ContentId && item.Untradable)
+                        continue;
+
+                    moves.Add(new Move(from, to, item, group.Key.IsHq, group.Sum(s => s.Quantity)));
+                }
+            }
+        }
+
         // Rough stack count per retainer after the moves, to warn about full retainers
         var stacksAfter = retainers.ToDictionary(r => r.Id, r => r.Location.Items.Count);
         var arrived = new HashSet<(ulong, uint, bool)>();
         foreach (var move in moves)
         {
-            var leaving = move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
-            stacksAfter[move.From.Id] -= leaving;
+            if (!move.From.IsBags)
+                stacksAfter[move.From.Id] -= move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
 
             var alreadyThere = move.To.Location.Items.Any(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
-            if (!alreadyThere && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
+            if (!move.To.IsBags && !alreadyThere && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
                 stacksAfter[move.To.Id] += 1;
         }
 

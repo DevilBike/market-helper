@@ -217,6 +217,14 @@ public class ValuationTab
             plugin.Configuration.Save();
             nextRowRefresh = DateTime.MinValue;
         }
+
+        var carry = plugin.Configuration.CarryItemIds;
+        if (ImGui.Selectable(carry.Contains(row.Item.Id) ? "Stop keeping this on me" : "Keep this on me"))
+        {
+            if (!carry.Remove(row.Item.Id))
+                carry.Add(row.Item.Id);
+            plugin.Configuration.Save();
+        }
     }
 
     public static string LocationLabel(Location location) => location.Kind switch

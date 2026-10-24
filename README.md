@@ -12,6 +12,12 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer as the catch-all. The most specific rule wins: a single item, then a category, then a group, then the catch-all. The Moves list shows what belongs elsewhere, including trades between characters. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
+## Inventory
+
+**Keep on me** lists the groups and single items that should stay in your bags. Everything else in your bags shows up in Retainers > Moves going to the retainer its rules name (you can turn that off), and any kept item found in a retainer shows up there to be taken out. Tick items from your bags, or right-click an item on the Valuation or Moves list.
+
+**Armory cleanup** lists items in your armory chest that none of your gearsets use, leaving soul crystals alone, and moves them into free bag slots with one click, with the same random delays as listing.
+
 ## Valuation
 
 Your bags and saddlebags are recorded whenever they change. Open each retainer's inventory once to record it; this works on every character you log into. Prices come from [Universalis](https://universalis.app) for each character's home world.

@@ -21,6 +21,11 @@ public class Configuration : IPluginConfiguration
     public List<RetainerRule> RetainerRules { get; set; } = new();
     public ulong CatchAllRetainerId { get; set; }
 
+    // Items and groups that stay in your bags
+    public HashSet<uint> CarryItemIds { get; set; } = new();
+    public HashSet<ItemGroup> CarryGroups { get; set; } = new();
+    public bool PlanBagMoves { get; set; } = true;
+
     // Scanning
     public bool IncludeArmory { get; set; } = false;
     public bool DetectRetainers { get; set; } = true;
