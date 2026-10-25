@@ -20,6 +20,9 @@ public static unsafe class GameUi
 
     public static bool IsOpen(string name) => GetReady(name) != null;
 
+    // The saddlebag window; the premium saddlebag shows in the same one
+    public static bool SaddlebagOpen() => IsOpen("InventoryBuddy") || IsOpen("InventoryBuddy2");
+
     // Sends the same event the window sends itself when you click something in it
     public static void Fire(AtkUnitBase* addon, bool updateState, params int[] args)
     {

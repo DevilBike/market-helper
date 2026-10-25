@@ -5,6 +5,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using MarketHelper.Inventory;
+using MarketHelper.Listing;
 using MarketHelper.Market;
 using MarketHelper.Organizing;
 
@@ -180,6 +181,12 @@ public class InventoryTab
             ImGui.SameLine();
             if (ImGui.SmallButton("Stop##saddle"))
                 tour.Stop();
+        }
+        else if (!GameUi.SaddlebagOpen())
+        {
+            ImGui.TextColored(new System.Numerics.Vector4(1f, 0.6f, 0.3f, 1f), "Open your saddlebag to move items in or out of it. Moving them with it closed disconnects you.");
+            if (tour.Status.Length > 0)
+                ImGui.TextUnformatted(tour.Status);
         }
         else
         {

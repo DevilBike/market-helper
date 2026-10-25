@@ -360,14 +360,27 @@ public sealed unsafe class RetainerTour : IDisposable
     }
 
     private (string, Func<StepResult>, bool) FillSaddlebag() =>
-        MoveLoop("Putting items in the saddlebag", Bags, Saddlebags, false, () => InventoryScanner.SaddlebagLoaded(),
+        MoveLoop("Putting items in the saddlebag", Bags, Saddlebags, false, () => SaddlebagUsable("fill"),
                  slot => Organizer.IsSaddlebagged(plugin.Valuator.GetItem(slot.ItemId), plugin.Configuration));
 
     // Saddlebag stacks that aren't kept there and match the filter go to the bags, up to the limit
     private (string, Func<StepResult>, bool) EmptySaddlebag(Func<(uint, bool), bool> wanted, int limit) =>
         MoveLoop("Taking items out of the saddlebag", Saddlebags, Bags, true,
-                 () => InventoryScanner.SaddlebagLoaded() && UsedSlots(Bags) < limit,
+                 () => SaddlebagUsable("empty") && UsedSlots(Bags) < limit,
                  slot => !Organizer.IsSaddlebagged(plugin.Valuator.GetItem(slot.ItemId), plugin.Configuration) && wanted((slot.ItemId, slot.IsHq)));
+
+    // The server disconnects you (error 90002) for moving saddlebag items while its window is closed,
+    // so saddlebag moves only happen with it open
+    private bool SaddlebagUsable(string action)
+    {
+        if (!InventoryScanner.SaddlebagLoaded())
+            return false;
+        if (GameUi.SaddlebagOpen())
+            return true;
+
+        Log.Add($"Didn't {action} the saddlebag: its window isn't open");
+        return false;
+    }
 
     // Moves one stack per step, looking at what's there each time, until nothing matches,
     // the destination is full, or keepGoing says stop
