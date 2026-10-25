@@ -32,6 +32,9 @@ public class Configuration : IPluginConfiguration
     // Sorting also puts your shards and crystals into retainers, top of the list first
     public bool StoreCrystals { get; set; } = true;
 
+    // Sorting takes items out of retainers only until this many bag slots are used (the bags hold 140)
+    public int BagStackLimit { get; set; } = 120;
+
     // Items and groups that stay in your bags
     public HashSet<uint> CarryItemIds { get; set; } = new();
     public HashSet<ItemGroup> CarryGroups { get; set; } = new();

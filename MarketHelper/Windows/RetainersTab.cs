@@ -157,6 +157,18 @@ public class RetainersTab
                 ImGui.SetTooltip("Shards, crystals and clusters go into the first retainer in the list, then the next once it's full.");
 
             ImGui.SameLine();
+            ImGui.SetNextItemWidth(110 * ImGuiHelpers.GlobalScale);
+            var limit = plugin.Configuration.BagStackLimit;
+            if (ImGui.SliderInt("Bag limit", ref limit, 20, 140))
+            {
+                plugin.Configuration.BagStackLimit = limit;
+                plugin.Configuration.Save();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Sort stops taking items out of a retainer once this many bag slots are used, then goes to put them away. Your bags hold 140.");
+
+            ImGui.SameLine();
             ImGui.TextDisabled("(?)");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Check opens each retainer's inventory to record it.\n" +

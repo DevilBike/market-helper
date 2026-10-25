@@ -5,6 +5,7 @@ using Dalamud.Game.Inventory;
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using MarketHelper.Listing;
 
 namespace MarketHelper.Inventory;
@@ -157,6 +158,31 @@ public sealed unsafe class InventoryScanner : IDisposable
     // Adds every retainer the game knows about for this character, so they show up
     // in the Retainers tab before their inventory has been opened
     // Records the game's retainer order, and adds retainers not seen yet when asked to
+    // The game marks retainers that aren't paid for as unavailable, and greys them out in the retainer list.
+    // The flag is only trusted while some other retainer is available, in case it means something else.
+    public static bool IsRetainerLocked(RetainerManager* manager, RetainerManager.Retainer* retainer, int row, AtkUnitBase* list)
+    {
+        if (manager == null || retainer == null || retainer->RetainerId == 0)
+            return false;
+
+        if (!retainer->Available && AnyAvailable(manager))
+            return true;
+
+        return list != null && GameUi.IsRetainerRowLocked(list, row, manager->MaxRetainerEntitlement);
+    }
+
+    private static bool AnyAvailable(RetainerManager* manager)
+    {
+        for (uint i = 0; i < 10; i++)
+        {
+            var retainer = manager->GetRetainerBySortedIndex(i);
+            if (retainer != null && retainer->RetainerId != 0 && retainer->Available)
+                return true;
+        }
+
+        return false;
+    }
+
     private void DetectRetainers(bool addNew)
     {
         var player = Plugin.PlayerState;
@@ -202,11 +228,13 @@ public sealed unsafe class InventoryScanner : IDisposable
                 changed = true;
             }
 
-            if (list != null && record.Locations.TryGetValue(key, out var seen))
+            if (record.Locations.TryGetValue(key, out var seen))
             {
-                var locked = GameUi.IsRetainerRowLocked(list, (int)order, manager->MaxRetainerEntitlement);
+                // Without the retainer list open, only the game's own flag can be read
+                var locked = IsRetainerLocked(manager, retainer, (int)order, list) || (list == null && seen.Locked);
                 if (seen.Locked != locked)
                 {
+                    Plugin.Log.Information($"Retainer {name} is now {(locked ? "locked (not paid for)" : "unlocked")}; available flag {retainer->Available}, row {order}");
                     seen.Locked = locked;
                     changed = true;
                 }
