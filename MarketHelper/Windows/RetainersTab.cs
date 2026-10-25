@@ -438,6 +438,10 @@ public class RetainersTab
 
         DrawOverflow(current, rule);
 
+        var full = after > Organizer.RetainerSlots;
+        if (ImGui.CollapsingHeader($"Make room{(full ? $" ({after - Organizer.RetainerSlots} stacks too many)" : string.Empty)}###makeroom", full ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None))
+            DrawMakeRoom(current, rule, after);
+
         var isCatchAll = rule.CatchAll;
         if (ImGui.Checkbox($"Catch-all: store anything of {current.Owner.Name}'s without a rule here", ref isCatchAll))
         {
@@ -462,6 +466,104 @@ public class RetainersTab
 
         if (ImGui.CollapsingHeader("Copy to other characters###copyrules"))
             DrawCopyRules(current.Owner);
+    }
+
+    // What ends up in a retainer after the moves, split into the groups and categories that
+    // could be handed to another retainer, biggest first; the best fit for the excess is marked
+    private void DrawMakeRoom(RetainerRef current, RetainerRule rule, int after)
+    {
+        var leaving = plan.Moves.Where(m => m.From.IsRetainer && m.From.Id == current.Id)
+            .Select(m => (m.Item.Id, m.IsHq)).ToHashSet();
+        var staying = current.Location.Items
+            .Where(s => !leaving.Contains((s.ItemId, s.IsHq)))
+            .Select(s => plugin.Valuator.GetItem(s.ItemId));
+        var arriving = plan.Moves.Where(m => m.To.IsRetainer && m.To.Id == current.Id)
+            .SelectMany(m => Enumerable.Repeat(m.Item, Math.Max(1, m.From.Location.Items.Count(s => s.ItemId == m.Item.Id && s.IsHq == m.IsHq))));
+
+        // Each option is a category or a whole group; single items are left alone
+        var options = new Dictionary<(ItemGroup Group, uint Category), int>();
+        foreach (var item in staying.Concat(arriving))
+        {
+            if (rule.ItemIds.Contains(item.Id))
+                continue;
+
+            if (!rule.UiCategories.Contains(item.UiCategory) && item.Group != ItemGroup.None && rule.Groups.Contains(item.Group))
+                options[(item.Group, 0u)] = options.GetValueOrDefault((item.Group, 0u)) + 1;
+            if (item.UiCategory != 0)
+                options[(ItemGroup.None, item.UiCategory)] = options.GetValueOrDefault((ItemGroup.None, item.UiCategory)) + 1;
+        }
+
+        if (options.Count == 0)
+        {
+            ImGui.TextDisabled("Nothing here that a category or group rule could move.");
+            return;
+        }
+
+        var excess = after - Organizer.RetainerSlots;
+        var bestFit = excess > 0
+            ? options.Where(o => o.Value >= excess).OrderBy(o => o.Value).Select(o => o.Key).FirstOrDefault((ItemGroup.None, uint.MaxValue))
+            : (ItemGroup.None, uint.MaxValue);
+
+        var others = retainers
+            .Where(r => r.Owner.ContentId == current.Owner.ContentId && r.Id != current.Id && !IsIgnored(r.Id) && !r.Location.Locked)
+            .OrderBy(r => r.Location.Order).ThenBy(r => r.Name)
+            .ToList();
+
+        ImGui.TextDisabled(excess > 0
+            ? $"Move one of these to a retainer with room to free at least {excess} stacks. The marked one is the smallest that's enough."
+            : "Biggest things stored here, if you want to free up space.");
+
+        foreach (var ((group, category), stacks) in options.OrderByDescending(o => o.Value).Take(12))
+        {
+            var isGroup = category == 0;
+            var name = isGroup ? $"{ItemGroups.Label(group)} (group)" : CategoryName(category);
+            var groupNote = !isGroup && !rule.UiCategories.Contains(category) && ItemInGroupHere(category, rule) is { } g
+                ? $", part of {ItemGroups.Label(g)}" : string.Empty;
+
+            ImGui.SetNextItemWidth(130 * ImGuiHelpers.GlobalScale);
+            using (var combo = ImRaii.Combo($"##makeroom{group}{category}", "Move to..."))
+            {
+                if (combo.Success)
+                {
+                    foreach (var other in others)
+                    {
+                        var free = Organizer.RetainerSlots - plan.StacksAfter.GetValueOrDefault(other.Id, other.Location.Items.Count);
+                        using var color = ImRaii.PushColor(ImGuiCol.Text, ImGui.GetColorU32(ImGuiCol.TextDisabled), free < stacks);
+                        if (!ImGui.Selectable($"{other.Name} ({Math.Max(0, free)} free)##makeroomto{other.Id}"))
+                            continue;
+
+                        // Categories come before groups and the catch-all, so a category rule there wins
+                        var target = plugin.Configuration.GetRule(other.Id);
+                        foreach (var owned in RulesOfOwner(current))
+                        {
+                            if (isGroup)
+                                owned.Groups.Remove(group);
+                            else
+                                owned.UiCategories.Remove(category);
+                        }
+
+                        if (isGroup)
+                            target.Groups.Add(group);
+                        else
+                            target.UiCategories.Add(category);
+                        Save();
+                    }
+                }
+            }
+
+            ImGui.SameLine();
+            var label = $"{name} ({stacks} stacks{groupNote})";
+            if ((group, category) == bestFit)
+                Colored(Highlight, $"{label}  <- enough on its own");
+            else
+                ImGui.TextUnformatted(label);
+        }
+    }
+
+    private ItemGroup? ItemInGroupHere(uint category, RetainerRule rule)
+    {
+        var group = ItemGroups.GroupOfCategory(category, CategoryName(category));
+        return group != ItemGroup.None && rule.Groups.Contains(group) ? group : null;
     }
 
     private void DrawOverflow(RetainerRef current, RetainerRule rule)
