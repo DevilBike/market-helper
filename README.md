@@ -16,18 +16,20 @@ The tab shows one character at a time (the one you're logged in as, unless you p
 
 The Moves list shows what belongs elsewhere and can be searched and filtered. **Across characters** lists tradable items that several characters hold in small amounts, and which character has the most, so you can trade them together. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
-Retainers are listed in their in-game order, with how long ago each was last checked. Each group and category shows how many stacks the character has of it, and the biggest categories without a rule are suggested with an Add button. A retainer can be ignored (it's left alone and shown greyed out at the bottom) or given an overflow retainer that takes new stacks once it's full. **Copy to other characters** copies each retainer's rules to the retainer in the same list position on your other characters, and can do so automatically for characters with no rules yet.
+Retainers are listed in their in-game order (retainers that aren't paid for are marked locked and skipped), with how long ago each was last checked. Each group and category shows how many stacks the character has of it, and the biggest categories without a rule are suggested with an Add button. A retainer can be ignored (it's left alone and shown greyed out at the bottom) or given an overflow retainer that takes new stacks once it's full. **Copy to other characters** copies each retainer's rules to the retainer in the same list position on your other characters, and can do so automatically for characters with no rules yet.
 
 With the retainer list open at a summoning bell:
 
 - **Check all retainers** opens each retainer's inventory in turn and records it.
-- **Sort this character's retainers** first shows what it will do, then on **Go** takes everything that belongs elsewhere out of each retainer into your bags, visits each destination and puts it in, topping up partial stacks before using empty slots. If your bags fill up, run it again. With **Store crystals too**, your shards, crystals and clusters go into the first retainer in the list, then the next as each fills (a kind only goes in when all of it fits). Moves to another character still need a trade.
+- **Sort this character's retainers** first shows what it will do, then on **Go** takes everything that belongs elsewhere out of each retainer into your bags, visits each destination and puts it in, topping up partial stacks before using empty slots. When your bags fill up it stops taking things out, puts away what it has, and goes round again until the job is done. With **Store crystals too**, your shards, crystals and clusters go into the first retainer in the list, then the next as each fills (a kind only goes in when all of it fits). Moves to another character still need a trade.
 
 Both click through the retainer greetings and use the same random delays as listing; the status line shows the current step.
 
 ## Inventory
 
 **Keep on me** lists the groups and single items (in collapsible sections) that should stay in your bags. Everything else in your bags shows up in Retainers > Moves going to the retainer its rules name (you can turn that off), and any kept item found in a retainer shows up there to be taken out. Tick items from your bags (searchable, sorted by name, group, quantity or kept first), or right-click an item on the Valuation or Moves list.
+
+**Saddlebag** lists the groups and single items that live in your saddlebag. Sort takes them out of retainers and puts them in the saddlebag at the end, and sends everything else in the saddlebag to its retainer. Buttons there fill or empty the saddlebag anywhere. Open the saddlebag once per session so it can be read.
 
 **Armory cleanup** lists items in your armory chest that none of your gearsets use, leaving soul crystals and anything you've chosen to keep in the armory alone (right-click an item to keep it there), and moves them into free bag slots with one click, with the same random delays as listing.
 

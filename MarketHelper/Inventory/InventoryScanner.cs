@@ -5,6 +5,7 @@ using Dalamud.Game.Inventory;
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using MarketHelper.Listing;
 
 namespace MarketHelper.Inventory;
 
@@ -85,6 +86,8 @@ public sealed unsafe class InventoryScanner : IDisposable
 
     public static bool RetainerPagesLoaded() => IsLoaded(GameInventoryType.RetainerPage1);
 
+    public static bool SaddlebagLoaded() => IsLoaded(GameInventoryType.SaddleBag1);
+
     private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) => dirty = true;
 
     private void OnLogin() => dirty = true;
@@ -163,6 +166,9 @@ public sealed unsafe class InventoryScanner : IDisposable
 
         var record = store.GetOrAdd(player.ContentId);
         var changed = false;
+
+        // The retainer list greys out retainers that aren't paid for
+        var list = GameUi.GetReady("RetainerList");
         for (uint order = 0; order < 10; order++)
         {
             var retainer = manager->GetRetainerBySortedIndex(order);
@@ -194,6 +200,16 @@ public sealed unsafe class InventoryScanner : IDisposable
                 location.RetainerName = name;
                 location.Order = (int)order;
                 changed = true;
+            }
+
+            if (list != null && record.Locations.TryGetValue(key, out var seen))
+            {
+                var locked = GameUi.IsRetainerRowLocked(list, (int)order, manager->MaxRetainerEntitlement);
+                if (seen.Locked != locked)
+                {
+                    seen.Locked = locked;
+                    changed = true;
+                }
             }
         }
 
@@ -242,6 +258,7 @@ public sealed unsafe class InventoryScanner : IDisposable
             RetainerId = retainerId,
             RetainerName = retainerName,
             Order = existing?.Order ?? 99,
+            Locked = existing?.Locked ?? false,
             CheckedUtc = now,
             UpdatedUtc = now,
             Items = items,

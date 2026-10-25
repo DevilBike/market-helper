@@ -10,8 +10,10 @@ public record RetainerRef(CharacterRecord Owner, Location Location)
 {
     public ulong Id => Location.RetainerId;
     public bool IsBags => Location.Kind == LocationKind.Bags;
-    public string Name => IsBags ? "your bags" : Location.RetainerName;
-    public string Label => IsBags ? $"Bags ({Owner.Name})" : $"{Location.RetainerName} ({Owner.Name})";
+    public bool IsSaddlebag => Location.Kind == LocationKind.Saddlebag;
+    public bool IsRetainer => Location.Kind == LocationKind.Retainer;
+    public string Name => IsBags ? "your bags" : IsSaddlebag ? "your saddlebag" : Location.RetainerName;
+    public string Label => IsBags ? $"Bags ({Owner.Name})" : IsSaddlebag ? $"Saddlebag ({Owner.Name})" : $"{Location.RetainerName} ({Owner.Name})";
     public string Key => $"{Owner.ContentId}:{Location.Kind}:{Location.RetainerId}";
     public bool Scanned => Location.UpdatedUtc != System.DateTime.MinValue;
 }
@@ -47,6 +49,11 @@ public class Organizer
     public static bool IsCarried(ItemInfo item, Configuration config) =>
         config.CarryItemIds.Contains(item.Id) ||
         (item.Group != ItemGroup.None && config.CarryGroups.Contains(item.Group));
+
+    public static bool IsSaddlebagged(ItemInfo item, Configuration config) =>
+        !IsCarried(item, config) &&
+        (config.SaddlebagItemIds.Contains(item.Id) ||
+         (item.Group != ItemGroup.None && config.SaddlebagGroups.Contains(item.Group)));
 
     // Most specific wins: single item, then category, then broad group, then a catch-all.
     // Among equally specific rules, a retainer of the item's own character wins.
@@ -88,7 +95,9 @@ public class Organizer
         var moves = new List<Move>();
 
         // Ignored retainers are neither emptied nor filled
+        // Retainers that aren't paid for can't be opened, so they count as ignored too
         var ignored = config.RetainerRules.Where(r => r.Ignored).Select(r => r.RetainerId).ToHashSet();
+        ignored.UnionWith(retainers.Where(r => r.Location.Locked).Select(r => r.Id));
         var active = retainers.Where(r => !ignored.Contains(r.Id)).ToList();
         var allIds = active.Select(r => r.Id).ToHashSet();
         var idsByOwner = active.GroupBy(r => r.Owner.ContentId).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToHashSet());
@@ -99,16 +108,17 @@ public class Organizer
         }
 
         // Items on the keep-on-me list come back to their owner's bags
-        RetainerRef BagsOf(CharacterRecord owner) => new(owner,
-            owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(LocationKind.Bags))
-            ?? new Location { Kind = LocationKind.Bags });
+        RetainerRef PlaceOf(CharacterRecord owner, LocationKind kind) => new(owner,
+            owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(kind))
+            ?? new Location { Kind = kind });
+        RetainerRef BagsOf(CharacterRecord owner) => PlaceOf(owner, LocationKind.Bags);
 
         foreach (var from in active)
         {
             foreach (var group in from.Location.Items.GroupBy(s => (s.ItemId, s.IsHq)))
             {
                 var item = valuator.GetItem(group.Key.ItemId);
-                if (IsCarried(item, config))
+                if (IsCarried(item, config) || IsSaddlebagged(item, config))
                 {
                     moves.Add(new Move(from, BagsOf(from.Owner), item, group.Key.IsHq, group.Sum(s => s.Quantity)));
                     continue;
@@ -126,28 +136,44 @@ public class Organizer
             }
         }
 
-        // Everything else in your bags goes to the retainer its rules name
+        // Everything else in your bags and saddlebag goes to the retainer its rules name;
+        // items kept in the saddlebag go there from your bags
         if (config.PlanBagMoves)
         {
             foreach (var owner in characterList)
             {
-                if (!owner.Locations.TryGetValue(CharacterRecord.LocationKey(LocationKind.Bags), out var bags))
-                    continue;
-
-                var from = new RetainerRef(owner, bags);
-                foreach (var group in bags.Items.GroupBy(s => (s.ItemId, s.IsHq)))
+                foreach (var kind in new[] { LocationKind.Bags, LocationKind.Saddlebag })
                 {
-                    var item = valuator.GetItem(group.Key.ItemId);
-                    if (IsCarried(item, config))
+                    if (!owner.Locations.TryGetValue(CharacterRecord.LocationKey(kind), out var place))
                         continue;
 
-                    var target = Target(item, owner);
-                    if (target == 0 || !byId.TryGetValue(target, out var to))
-                        continue;
-                    if (from.Owner.ContentId != to.Owner.ContentId && item.Untradable)
-                        continue;
+                    var from = new RetainerRef(owner, place);
+                    foreach (var group in place.Items.GroupBy(s => (s.ItemId, s.IsHq)))
+                    {
+                        var item = valuator.GetItem(group.Key.ItemId);
+                        var quantity = group.Sum(s => s.Quantity);
+                        if (IsCarried(item, config))
+                        {
+                            if (kind == LocationKind.Saddlebag)
+                                moves.Add(new Move(from, BagsOf(owner), item, group.Key.IsHq, quantity));
+                            continue;
+                        }
 
-                    moves.Add(new Move(from, to, item, group.Key.IsHq, group.Sum(s => s.Quantity)));
+                        if (IsSaddlebagged(item, config))
+                        {
+                            if (kind == LocationKind.Bags)
+                                moves.Add(new Move(from, PlaceOf(owner, LocationKind.Saddlebag), item, group.Key.IsHq, quantity));
+                            continue;
+                        }
+
+                        var target = Target(item, owner);
+                        if (target == 0 || !byId.TryGetValue(target, out var to))
+                            continue;
+                        if (from.Owner.ContentId != to.Owner.ContentId && item.Untradable)
+                            continue;
+
+                        moves.Add(new Move(from, to, item, group.Key.IsHq, quantity));
+                    }
                 }
             }
         }
@@ -163,10 +189,10 @@ public class Organizer
         var arrived = new HashSet<(ulong, uint, bool)>();
         foreach (var move in moves)
         {
-            if (!move.From.IsBags)
+            if (move.From.IsRetainer)
                 stacksAfter[move.From.Id] -= move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
 
-            if (!move.To.IsBags && !AlreadyThere(move) && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
+            if (move.To.IsRetainer && !AlreadyThere(move) && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
                 stacksAfter[move.To.Id] += 1;
         }
 
@@ -187,13 +213,13 @@ public class Organizer
             if (CountStacks(retainers, moves).GetValueOrDefault(full.Id) <= RetainerSlots)
                 continue;
 
-            moves.RemoveAll(m => m.To.Id == full.Id && !m.To.IsBags && !m.From.IsBags && m.From.Id == overflow.Id);
+            moves.RemoveAll(m => m.To.IsRetainer && m.To.Id == full.Id && m.From.IsRetainer && m.From.Id == overflow.Id);
 
             var excess = CountStacks(retainers, moves)[full.Id] - RetainerSlots;
             for (var i = moves.Count - 1; i >= 0 && excess > 0; i--)
             {
                 var move = moves[i];
-                if (move.To.IsBags || move.To.Id != full.Id || AlreadyThere(move))
+                if (!move.To.IsRetainer || move.To.Id != full.Id || AlreadyThere(move))
                     continue;
                 if (move.From.Owner.ContentId != overflow.Owner.ContentId && move.Item.Untradable)
                     continue;

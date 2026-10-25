@@ -48,6 +48,13 @@ public sealed unsafe class RetainerTour : IDisposable
     private readonly string quitText;
 
     private const int MaxCrystals = 9999;
+    private const int MaxRounds = 10;
+
+    private static readonly GameInventoryType[] Saddlebags =
+    [
+        GameInventoryType.SaddleBag1, GameInventoryType.SaddleBag2,
+        GameInventoryType.PremiumSaddleBag1, GameInventoryType.PremiumSaddleBag2,
+    ];
 
     // Slots already used during the current visit, in case the game hasn't shown the last move yet
     private readonly HashSet<(GameInventoryType, int)> taken = new();
@@ -58,6 +65,8 @@ public sealed unsafe class RetainerTour : IDisposable
     private int done;
     private int moved;
     private bool bagsFull;
+    private int round;
+    private int movedAtRoundStart;
     private string? failure;
 
     public bool IsRunning => runner.IsRunning;
@@ -94,8 +103,10 @@ public sealed unsafe class RetainerTour : IDisposable
 
     private string Summary() => task switch
     {
-        "Sorting" when bagsFull => $"Moved {moved} stacks, then your bags were full. Run Sort again to carry on.",
+        "Sorting" when bagsFull => $"Moved {moved} stacks in {round} rounds, but your bags stayed full. Make some room and run Sort again.",
         "Sorting" => $"Moved {moved} stacks. Anything left on the Moves list needs a trade or a free slot.",
+        "Saddlebag" when bagsFull => $"Moved {moved} stacks, then ran out of room.",
+        "Saddlebag" => $"Moved {moved} stacks.",
         _ => $"Checked {done} of {total} retainers.",
     };
 
@@ -151,6 +162,8 @@ public sealed unsafe class RetainerTour : IDisposable
         var me = Plugin.PlayerState.ContentId;
         var config = plugin.Configuration;
         var ignored = config.RetainerRules.Where(r => r.Ignored).Select(r => r.RetainerId).ToHashSet();
+        if (plugin.Store.Characters.TryGetValue(me, out var character))
+            ignored.UnionWith(character.Locations.Values.Where(l => l.Kind == LocationKind.Retainer && l.Locked).Select(l => l.RetainerId));
         var order = RetainerIdsInListOrder().Where(id => !ignored.Contains(id)).ToList();
         var plan = plugin.Organizer.Plan(plugin.Store.Characters.Values, config);
         var moves = plan.Moves
@@ -160,10 +173,10 @@ public sealed unsafe class RetainerTour : IDisposable
         // Where each item ends up; items going back to the bags just get taken out
         var destination = new Dictionary<(uint, bool), ulong>();
         foreach (var move in moves)
-            destination[(move.Item.Id, move.IsHq)] = move.To.IsBags ? 0 : move.To.Id;
+            destination[(move.Item.Id, move.IsHq)] = move.To.IsRetainer ? move.To.Id : 0;
 
-        var takeFrom = moves.Where(m => !m.From.IsBags).Select(m => m.From.Id).ToHashSet();
-        var putInto = moves.Where(m => !m.To.IsBags).Select(m => m.To.Id).ToHashSet();
+        var takeFrom = moves.Where(m => m.From.IsRetainer).Select(m => m.From.Id).ToHashSet();
+        var putInto = moves.Where(m => m.To.IsRetainer).Select(m => m.To.Id).ToHashSet();
         var crystals = config.StoreCrystals && PlayerHasCrystals();
 
         var preview = new SortPreview(
@@ -183,20 +196,36 @@ public sealed unsafe class RetainerTour : IDisposable
         return preview;
     }
 
-    // Two rounds: take out of every retainer whatever belongs elsewhere, then put it all away.
+    // Each round takes out of every retainer whatever belongs elsewhere until the bags are full,
+    // then puts it all away. Rounds repeat while the bags keep filling up and things keep moving.
     // Crystals go into the first retainer in the list that has room, then the next.
     public void RunSort(SortPreview preview)
     {
         if (IsRunning || !CanStart)
             return;
 
+        Begin("Sorting", 0);
+        round = 0;
+        runner.Add("Emptying the saddlebag", () =>
+        {
+            runner.AddNext(EmptySaddlebag(item => preview.Destination.ContainsKey(item)));
+            return StepResult.Done;
+        }, false);
+        QueueRound(preview);
+    }
+
+    private void QueueRound(SortPreview preview)
+    {
+        round++;
+        bagsFull = false;
+        movedAtRoundStart = moved;
         var deposits = preview.Crystals ? preview.Order : preview.PutInto;
-        Begin("Sorting", preview.TakeFrom.Count + deposits.Count);
+        total += preview.TakeFrom.Count + deposits.Count;
 
         foreach (var id in preview.TakeFrom)
         {
             var retainerId = id;
-            Gate(retainerId, () => true, () => Withdraw(retainerId, preview.Destination));
+            Gate(retainerId, () => !bagsFull, () => Withdraw(retainerId, preview.Destination));
         }
 
         var putInto = preview.PutInto.ToHashSet();
@@ -207,6 +236,90 @@ public sealed unsafe class RetainerTour : IDisposable
                  () => putInto.Contains(retainerId) || (preview.Crystals && PlayerHasCrystals()),
                  () => Deposit(retainerId, preview.Destination).Concat(preview.Crystals ? StoreCrystals() : Enumerable.Empty<(string, Func<StepResult>, bool)>()));
         }
+
+        runner.Add("Checking what's left", () =>
+        {
+            plugin.Scanner.ScanNow();
+            if (!bagsFull || moved == movedAtRoundStart || round >= MaxRounds)
+            {
+                runner.AddNext(FillSaddlebag());
+                return StepResult.Done;
+            }
+
+            // The bags filled up while taking things out; what came out is put away now, so go round again
+            if (PreviewSort() is { } next)
+                QueueRound(next);
+            else
+                runner.AddNext(FillSaddlebag());
+            failure = null;
+            return StepResult.Done;
+        }, false);
+    }
+
+    // Can be used anywhere: kept items from the bags into the saddlebag
+    public void FillSaddlebagNow()
+    {
+        if (IsRunning)
+            return;
+
+        Begin("Saddlebag", 0);
+        runner.Add("Filling the saddlebag", () =>
+        {
+            runner.AddNext(FillSaddlebag());
+            return StepResult.Done;
+        }, false);
+    }
+
+    // Can be used anywhere: everything not kept in the saddlebag comes out into the bags
+    public void EmptySaddlebagNow()
+    {
+        if (IsRunning)
+            return;
+
+        Begin("Saddlebag", 0);
+        runner.Add("Emptying the saddlebag", () =>
+        {
+            runner.AddNext(EmptySaddlebag(_ => true));
+            return StepResult.Done;
+        }, false);
+    }
+
+    private IEnumerable<(string, Func<StepResult>, bool)> FillSaddlebag()
+    {
+        var steps = new List<(string, Func<StepResult>, bool)>();
+        if (!InventoryScanner.SaddlebagLoaded())
+            return steps;
+
+        taken.Clear();
+        added.Clear();
+        foreach (var slot in Read(Bags))
+        {
+            var item = plugin.Valuator.GetItem(slot.ItemId);
+            if (Organizer.IsSaddlebagged(item, plugin.Configuration))
+                steps.Add(($"Putting {item.Name} in the saddlebag", () => MoveTo(slot, Saddlebags, false), true));
+        }
+
+        return steps;
+    }
+
+    // Saddlebag stacks that aren't kept there and match the filter go to the bags
+    private IEnumerable<(string, Func<StepResult>, bool)> EmptySaddlebag(Func<(uint, bool), bool> wanted)
+    {
+        var steps = new List<(string, Func<StepResult>, bool)>();
+        if (!InventoryScanner.SaddlebagLoaded())
+            return steps;
+
+        taken.Clear();
+        added.Clear();
+        foreach (var slot in Read(Saddlebags))
+        {
+            var item = plugin.Valuator.GetItem(slot.ItemId);
+            if (Organizer.IsSaddlebagged(item, plugin.Configuration) || !wanted((slot.ItemId, slot.IsHq)))
+                continue;
+            steps.Add(($"Taking {item.Name} out of the saddlebag", () => MoveTo(slot, Bags, true), true));
+        }
+
+        return steps;
     }
 
     // Decides when its turn comes whether the retainer still needs a visit
@@ -214,6 +327,16 @@ public sealed unsafe class RetainerTour : IDisposable
     {
         runner.Add("Next retainer", () =>
         {
+            // Greyed-out retainers (not paid for) can't be opened
+            var list = GameUi.GetReady(ListAddon);
+            var index = RetainerIdsInListOrder().IndexOf(retainerId);
+            var manager = RetainerManager.Instance();
+            if (list != null && index >= 0 && manager != null && GameUi.IsRetainerRowLocked(list, index, manager->MaxRetainerEntitlement))
+            {
+                done++;
+                return StepResult.Done;
+            }
+
             if (needed())
                 runner.AddNext(Visit(retainerId, whileOpen));
             else

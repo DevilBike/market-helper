@@ -37,6 +37,10 @@ public class Configuration : IPluginConfiguration
     public HashSet<ItemGroup> CarryGroups { get; set; } = new();
     public bool PlanBagMoves { get; set; } = true;
 
+    // Items and groups that live in the saddlebag
+    public HashSet<uint> SaddlebagItemIds { get; set; } = new();
+    public HashSet<ItemGroup> SaddlebagGroups { get; set; } = new();
+
     // Armory items that stay put even though no gearset uses them
     public HashSet<uint> ArmoryKeepIds { get; set; } = new();
 
