@@ -168,6 +168,27 @@ public class RetainersTab
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Sort stops taking items out of a retainer once this many bag slots are used, then goes to put them away. Your bags hold 140.");
 
+            if (ImGui.Button("Top up crystals"))
+                tour.TopUpCrystals();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Takes crystals back from the retainers holding the fewest of each kind first, until you have the amount set here.\nWhole stacks only, never past 9,999.");
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(90 * ImGuiHelpers.GlobalScale);
+            var crystalTarget = plugin.Configuration.CrystalTopUpTarget;
+            if (ImGui.InputInt("of each##crystaltarget", ref crystalTarget, 100))
+            {
+                plugin.Configuration.CrystalTopUpTarget = Math.Clamp(crystalTarget, 1, 9999);
+                plugin.Configuration.Save();
+            }
+
+            ImGui.SameLine();
+            var topUpAfter = plugin.Configuration.TopUpCrystalsAfterSort;
+            if (ImGui.Checkbox("Top up after sorting", ref topUpAfter))
+            {
+                plugin.Configuration.TopUpCrystalsAfterSort = topUpAfter;
+                plugin.Configuration.Save();
+            }
+
             ImGui.SameLine();
             ImGui.TextDisabled("(?)");
             if (ImGui.IsItemHovered())
@@ -182,6 +203,11 @@ public class RetainersTab
 
         if (tour.Status.Length > 0)
             ImGui.TextUnformatted(tour.Status);
+
+        if (ImGui.SmallButton("Copy sorting log"))
+            ImGui.SetClipboardText(plugin.SortLog.Read());
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"The last 10 runs, every visit and move with times. Paste it to Claude to tune the next version.\nSaved at {plugin.SortLog.FilePath}");
     }
 
     private void DrawSortPreview(SortPreview preview)
@@ -194,6 +220,8 @@ public class RetainersTab
             ImGui.TextWrapped($"Take out of: {Names(preview.TakeFrom)}");
         if (preview.PutInto.Count > 0)
             ImGui.TextWrapped($"Put into: {Names(preview.PutInto)}");
+        if (preview.TopUps > 0)
+            ImGui.TextWrapped($"Top up {preview.TopUps} stacks you keep one of on you.");
         if (preview.Crystals)
             ImGui.TextWrapped($"Crystals: into {Names(preview.Order.Take(1))} first, then down the list as retainers fill.");
 

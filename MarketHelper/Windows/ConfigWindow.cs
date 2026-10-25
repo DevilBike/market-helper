@@ -118,6 +118,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var itemSort = configuration.AutoItemSort;
+        if (ImGui.Checkbox("Run the game's item sort when I close a retainer and when I leave the bell", ref itemSort))
+        {
+            configuration.AutoItemSort = itemSort;
+            configuration.Save();
+        }
+
         var cacheMinutes = configuration.PriceCacheMinutes;
         if (ImGui.SliderInt("Refresh prices after (min)", ref cacheMinutes, 5, 240))
         {

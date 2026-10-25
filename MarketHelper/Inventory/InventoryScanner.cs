@@ -148,6 +148,7 @@ public sealed unsafe class InventoryScanner : IDisposable
                 var name = retainer->NameString;
                 changed |= Snapshot(record, LocationKind.Retainer, RetainerPages, retainer->RetainerId, name);
                 changed |= Snapshot(record, LocationKind.RetainerMarket, [GameInventoryType.RetainerMarket], retainer->RetainerId, name);
+                changed |= SnapshotCrystals(record, retainer->RetainerId);
             }
         }
 
@@ -287,10 +288,32 @@ public sealed unsafe class InventoryScanner : IDisposable
             RetainerName = retainerName,
             Order = existing?.Order ?? 99,
             Locked = existing?.Locked ?? false,
+            Crystals = existing?.Crystals,
             CheckedUtc = now,
             UpdatedUtc = now,
             Items = items,
         };
+        return true;
+    }
+
+    private static bool SnapshotCrystals(CharacterRecord record, ulong retainerId)
+    {
+        if (!IsLoaded(GameInventoryType.RetainerCrystals) ||
+            !record.Locations.TryGetValue(CharacterRecord.LocationKey(LocationKind.Retainer, retainerId), out var location))
+            return false;
+
+        var crystals = new Dictionary<uint, int>();
+        foreach (var item in Plugin.GameInventory.GetInventoryItems(GameInventoryType.RetainerCrystals))
+        {
+            if (!item.IsEmpty && item.BaseItemId != 0 && item.Quantity > 0)
+                crystals[item.BaseItemId] = item.Quantity;
+        }
+
+        if (location.Crystals != null && location.Crystals.Count == crystals.Count &&
+            crystals.All(c => location.Crystals.GetValueOrDefault(c.Key) == c.Value))
+            return false;
+
+        location.Crystals = crystals;
         return true;
     }
 

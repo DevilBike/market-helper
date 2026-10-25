@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Memory;
+using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -100,6 +101,18 @@ public static unsafe class GameUi
         addon->ReceiveEvent(AtkEventType.MouseDown, 0, evt, data);
         addon->ReceiveEvent(AtkEventType.MouseClick, 0, evt, data);
         addon->ReceiveEvent(AtkEventType.MouseUp, 0, evt, data);
+    }
+
+    // Runs a text command as if typed in the chat box, such as /itemsort
+    public static void RunCommand(string command)
+    {
+        var ui = UIModule.Instance();
+        if (ui == null)
+            return;
+
+        var text = Utf8String.FromString(command);
+        ui->ProcessChatBoxEntry(text, nint.Zero, false);
+        text->Dtor(true);
     }
 
     // RetainerList: picking a row sends 2, the row, then two empty values

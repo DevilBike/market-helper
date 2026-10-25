@@ -35,6 +35,16 @@ public class Configuration : IPluginConfiguration
     // Sorting takes items out of retainers only until this many bag slots are used (the bags hold 140)
     public int BagStackLimit { get; set; } = 120;
 
+    // The game's own item sort runs on a retainer's inventory as you close it, and on your bags as you leave the bell
+    public bool AutoItemSort { get; set; } = true;
+
+    // Topping up takes crystals back from the retainers holding the fewest until you have this many of each kind
+    public int CrystalTopUpTarget { get; set; } = 999;
+    public bool TopUpCrystalsAfterSort { get; set; } = false;
+
+    // Items you keep one stack of in your bags, topped up from your retainers; extra stacks stay in retainers
+    public HashSet<uint> TopUpItemIds { get; set; } = new();
+
     // Items and groups that stay in your bags
     public HashSet<uint> CarryItemIds { get; set; } = new();
     public HashSet<ItemGroup> CarryGroups { get; set; } = new();
