@@ -114,6 +114,8 @@ public sealed unsafe class RetainerTour : IDisposable
         "Saddlebag" when bagsFull => $"Moved {moved} stacks, then ran out of room.",
         "Saddlebag" => $"Moved {moved} stacks.",
         "Topping up crystals" => $"Took out {moved} kinds of crystals.",
+        "Taking out equipment and coffers" when bagsFull => $"Took out {moved} stacks, then your bags were full.",
+        "Taking out equipment and coffers" => $"Took out {moved} stacks.",
         _ => $"Checked {done} of {total} retainers.",
     };
 
@@ -711,9 +713,43 @@ public sealed unsafe class RetainerTour : IDisposable
     private (string, Func<StepResult>, bool) Withdraw(ulong retainerId, Dictionary<(uint, bool), ulong> destination, Func<ulong, bool> wanted) =>
         MoveLoop("Taking out items that belong elsewhere", RetainerPages, Bags, true,
             () => UsedSlots(Bags) < BagLimit,
-            slot => destination.TryGetValue((slot.ItemId, slot.IsHq), out var target) && target != retainerId && wanted(target),
+            slot => destination.TryGetValue((slot.ItemId, slot.IsHq), out var target) && target != retainerId && wanted(target) && !ListedHere(slot.ItemId),
             // Things for other retainers first; things kept in the bags take up room for good, so last
             candidates => candidates.OrderBy(s => destination[(s.ItemId, s.IsHq)] == 0));
+
+    // Items the open retainer has on the market board; its stock of them stays for relisting
+    private static bool ListedHere(uint itemId) =>
+        Read([GameInventoryType.RetainerMarket]).Any(s => s.ItemId == itemId);
+
+    // At the bell: every retainer's equipment and coffers come out into your bags, up to 140 slots
+    public void WithdrawEquipmentAndCoffers()
+    {
+        if (IsRunning || !CanStart)
+            return;
+
+        Begin("Taking out equipment and coffers", 0);
+        var ignored = plugin.Configuration.RetainerRules.Where(r => r.Ignored).Select(r => r.RetainerId).ToHashSet();
+        foreach (var id in RetainerIdsInListOrder().Where(id => !ignored.Contains(id)))
+        {
+            var retainerId = id;
+            total++;
+            Gate(retainerId,
+                 () => HasFreeSlot(Bags) && (RecordedRetainer(retainerId)?.Items.Any(s => IsGearOrCoffer(s.ItemId)) ?? true),
+                 () => [MoveLoop("Taking out equipment and coffers", RetainerPages, Bags, true,
+                                 () => HasFreeSlot(Bags),
+                                 slot => IsGearOrCoffer(slot.ItemId) && !ListedHere(slot.ItemId))]);
+        }
+
+        runner.Add(Finish());
+    }
+
+    private bool IsGearOrCoffer(uint itemId)
+    {
+        var item = plugin.Valuator.GetItem(itemId);
+        return item.Group == ItemGroup.Equipment ||
+               item.Name.Contains("Coffer", StringComparison.OrdinalIgnoreCase) ||
+               item.Name.Contains("Container", StringComparison.OrdinalIgnoreCase);
+    }
 
     // When the retainer is full but bag items still belong in it: take out one stack that
     // belongs elsewhere, put one in, and repeat, using the room left above the bag limit
@@ -732,7 +768,7 @@ public sealed unsafe class RetainerTour : IDisposable
             var toBags = false;
             if (!HasFreeSlot(RetainerPages))
             {
-                slot = Read(RetainerPages).FirstOrDefault(s => !tried.Contains((s.Container, s.Slot)) && destination.TryGetValue((s.ItemId, s.IsHq), out var target) && target != retainerId);
+                slot = Read(RetainerPages).FirstOrDefault(s => !tried.Contains((s.Container, s.Slot)) && destination.TryGetValue((s.ItemId, s.IsHq), out var target) && target != retainerId && !ListedHere(s.ItemId));
                 to = Bags;
                 toBags = true;
             }
@@ -812,7 +848,16 @@ public sealed unsafe class RetainerTour : IDisposable
             return true;
 
         var moving = slot with { Quantity = (int)now.Quantity };
-        var name = plugin.Valuator.GetItem(slot.ItemId).Name;
+        var info = plugin.Valuator.GetItem(slot.ItemId);
+        var name = info.Name;
+
+        // A container holds only one of a unique item; it waits for the next retainer instead
+        if (info.Unique && Read(containers).Any(s => s.ItemId == slot.ItemId))
+        {
+            Log.Add($"{name} is unique and the {PlaceName(containers[0])} already has one");
+            return true;
+        }
+
         if (SlotFor(containers, moving) is not { } target)
         {
             if (toBags)

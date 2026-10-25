@@ -58,6 +58,12 @@ public class MainWindow : Window, IDisposable
                 inventoryTab.Draw();
         }
 
+        using (var tab = ImRaii.TabItem("Saddlebag"))
+        {
+            if (tab.Success)
+                inventoryTab.DrawSaddlebag();
+        }
+
         using (var tab = ImRaii.TabItem("Retainers"))
         {
             if (tab.Success)

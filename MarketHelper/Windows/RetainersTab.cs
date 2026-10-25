@@ -168,6 +168,11 @@ public class RetainersTab
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Sort stops taking items out of a retainer once this many bag slots are used, then goes to put them away. Your bags hold 140.");
 
+            if (ImGui.Button("Take out all equipment and coffers"))
+                tour.WithdrawEquipmentAndCoffers();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Visits every retainer and takes out its gear and coffers until your bags are full. Gear your retainers are wearing stays on them.");
+            ImGui.SameLine();
             if (ImGui.Button("Top up crystals"))
                 tour.TopUpCrystals();
             if (ImGui.IsItemHovered())

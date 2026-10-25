@@ -39,12 +39,6 @@ public class InventoryTab
                 DrawCarry();
         }
 
-        using (var tab = ImRaii.TabItem("Saddlebag"))
-        {
-            if (tab.Success)
-                DrawSaddlebag();
-        }
-
         using (var tab = ImRaii.TabItem("Armory cleanup"))
         {
             if (tab.Success)
@@ -165,7 +159,7 @@ public class InventoryTab
         }
     }
 
-    private void DrawSaddlebag()
+    public void DrawSaddlebag()
     {
         ImGui.TextWrapped("Items on this list live in your saddlebag. Sort takes them out of retainers and puts them in the saddlebag at the end; everything else in the saddlebag goes to its retainer.");
 
@@ -216,24 +210,36 @@ public class InventoryTab
                 ImGui.TextDisabled("None yet. Tick items below.");
         }
 
-        if (!ImGui.CollapsingHeader("In your bags and saddlebag now", ImGuiTreeNodeFlags.DefaultOpen))
-            return;
-
         if (!plugin.Store.Characters.TryGetValue(Plugin.PlayerState.ContentId, out var character))
             return;
 
         ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
         ImGui.InputTextWithHint("##saddlesearch", "Search", ref saddleSearch, 100);
 
-        var rows = new[] { LocationKind.Saddlebag, LocationKind.Bags }
-            .SelectMany(kind => character.Locations.GetValueOrDefault(CharacterRecord.LocationKey(kind))?.Items
-                                ?? new List<ItemStack>())
+        if (ImGui.CollapsingHeader("In your saddlebag now", ImGuiTreeNodeFlags.DefaultOpen))
+            DrawSaddlebagRows(character, LocationKind.Saddlebag);
+        if (ImGui.CollapsingHeader("In your bags now###saddlebags"))
+            DrawSaddlebagRows(character, LocationKind.Bags);
+    }
+
+    private void DrawSaddlebagRows(CharacterRecord character, LocationKind kind)
+    {
+        var place = character.Locations.GetValueOrDefault(CharacterRecord.LocationKey(kind));
+        if (place == null)
+        {
+            ImGui.TextDisabled(kind == LocationKind.Saddlebag ? "Your saddlebag hasn't been recorded yet." : "Your bags haven't been recorded yet.");
+            return;
+        }
+
+        if (kind == LocationKind.Saddlebag)
+            ImGui.TextDisabled($"{place.Items.Count} of 70 slots used");
+
+        var rows = place.Items
             .GroupBy(s => s.ItemId)
             .Select(g => (Item: plugin.Valuator.GetItem(g.Key), Quantity: g.Sum(s => s.Quantity)))
             .Where(r => saddleSearch.Length == 0 || r.Item.Name.Contains(saddleSearch, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(r => Organizer.IsSaddlebagged(r.Item, Config)).ThenBy(r => r.Item.Name);
 
-        using var child = ImRaii.Child("saddleitems");
         foreach (var (item, quantity) in rows)
         {
             var byGroup = item.Group != ItemGroup.None && Config.SaddlebagGroups.Contains(item.Group);
@@ -242,7 +248,7 @@ public class InventoryTab
             var note = carried ? " (kept on you)" : byGroup ? $" (kept with {ItemGroups.Label(item.Group)})" : "";
             using (ImRaii.Disabled(byGroup || carried))
             {
-                if (ImGui.Checkbox($"{item.Name} x{quantity}{note}##saddlebag{item.Id}", ref kept))
+                if (ImGui.Checkbox($"{item.Name} x{quantity}{note}##saddle{kind}{item.Id}", ref kept))
                 {
                     if (kept)
                         Config.SaddlebagItemIds.Add(item.Id);

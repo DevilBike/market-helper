@@ -38,6 +38,10 @@ public class Organizer
         this.valuator = valuator;
     }
 
+    public static HashSet<uint> ListedBy(RetainerRef retainer) =>
+        retainer.Owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(LocationKind.RetainerMarket, retainer.Id))?
+            .Items.Select(s => s.ItemId).ToHashSet() ?? new HashSet<uint>();
+
     public static List<RetainerRef> Retainers(IEnumerable<CharacterRecord> characters) =>
         characters
             .SelectMany(c => c.Locations.Values
@@ -120,8 +124,13 @@ public class Organizer
 
         foreach (var from in active)
         {
+            // Stock of something this retainer has on the market board stays with it for relisting
+            var listed = ListedBy(from);
             foreach (var group in from.Location.Items.GroupBy(s => (s.ItemId, s.IsHq)))
             {
+                if (listed.Contains(group.Key.ItemId))
+                    continue;
+
                 var item = valuator.GetItem(group.Key.ItemId);
                 if (IsCarried(item, config) || IsSaddlebagged(item, config))
                 {
@@ -194,7 +203,52 @@ public class Organizer
         }
 
         ApplyOverflow(retainers, byId, moves, config);
+        SpreadUniqueItems(active, moves);
         return new MovePlan(moves, CountStacks(retainers, moves));
+    }
+
+    // A retainer holds only one of a unique item, so further copies go to the owner's
+    // next retainer in list order that doesn't have one, or stay put if that's where they are
+    private static void SpreadUniqueItems(List<RetainerRef> active, List<Move> moves)
+    {
+        var holding = new HashSet<(ulong Retainer, uint Item)>();
+        foreach (var retainer in active)
+        {
+            foreach (var stack in retainer.Location.Items)
+            {
+                var leaves = moves.Any(m => m.From.IsRetainer && m.From.Id == retainer.Id && m.Item.Id == stack.ItemId);
+                if (!leaves)
+                    holding.Add((retainer.Id, stack.ItemId));
+            }
+        }
+
+        for (var i = moves.Count - 1; i >= 0; i--)
+        {
+            var move = moves[i];
+            if (!move.Item.Unique || !move.To.IsRetainer || !holding.Contains((move.To.Id, move.Item.Id)))
+            {
+                if (move.Item.Unique && move.To.IsRetainer)
+                    holding.Add((move.To.Id, move.Item.Id));
+                continue;
+            }
+
+            var line = active.Where(r => r.Owner.ContentId == move.To.Owner.ContentId)
+                .OrderBy(r => r.Location.Order).ThenBy(r => r.Name).ToList();
+            var start = line.FindIndex(r => r.Id == move.To.Id);
+            var next = line.Skip(start + 1).Concat(line.Take(start))
+                .FirstOrDefault(r => !holding.Contains((r.Id, move.Item.Id)) || (move.From.IsRetainer && r.Id == move.From.Id));
+
+            if (next == null || (move.From.IsRetainer && next.Id == move.From.Id))
+            {
+                moves.RemoveAt(i);
+                if (move.From.IsRetainer)
+                    holding.Add((move.From.Id, move.Item.Id));
+                continue;
+            }
+
+            moves[i] = move with { To = next };
+            holding.Add((next.Id, move.Item.Id));
+        }
     }
 
     // Rough stack count per retainer after the moves, to warn about full retainers
