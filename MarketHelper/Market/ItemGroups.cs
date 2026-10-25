@@ -17,10 +17,7 @@ public static class ItemGroups
     // Ingredient, Seafood, Stone, Metal, Lumber, Cloth, Leather, Bone, Reagent, Dye, Part, Crystal, Catalyst
     public static readonly HashSet<uint> CraftingCategories = [45, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 59, 60];
 
-    // Miscellany, Other, Currency: only untradable items in these count as tokens
-    public static readonly HashSet<uint> TokenCategories = [61, 63, 100];
-
-    private const uint Miscellany = 61;
+    private const uint Currency = 100;
 
     // Newer categories are matched by their English names, so these groups need an English client
     public static readonly HashSet<string> HousingCategories =
@@ -35,22 +32,15 @@ public static class ItemGroups
     public static readonly HashSet<string> SeasonalCategories = ["Seasonal Miscellany"];
     public static readonly HashSet<string> FishingCategories = ["Fishing Tackle"];
 
-    // unlockable: a unique, usable Miscellany item, which is how mount, emote,
-    // hairstyle and barding items look in the game data
+    // Each item belongs to the group of its game category (ItemUICategory) and nothing else,
+    // so an item never lands in two places; gear goes by whether the game lets you equip it.
+    // Only Currency items count as tokens; Miscellany stays Miscellany.
     public static ItemGroup Classify(uint uiCategory, string categoryName, bool equippable, bool untradable, bool unlockable)
     {
         if (equippable)
             return ItemGroup.Equipment;
 
-        var byCategory = GroupOfCategory(uiCategory, categoryName);
-        if (byCategory != ItemGroup.None)
-            return byCategory;
-
-        if (uiCategory == Miscellany && unlockable)
-            return ItemGroup.Collectibles;
-        if (untradable && TokenCategories.Contains(uiCategory))
-            return ItemGroup.Tokens;
-        return ItemGroup.None;
+        return GroupOfCategory(uiCategory, categoryName);
     }
 
     // The group a whole category belongs to, for labelling the category picker
@@ -70,6 +60,8 @@ public static class ItemGroups
             return ItemGroup.Seasonal;
         if (FishingCategories.Contains(categoryName))
             return ItemGroup.Fishing;
+        if (uiCategory == Currency)
+            return ItemGroup.Tokens;
         return ItemGroup.None;
     }
 
@@ -78,9 +70,9 @@ public static class ItemGroups
         ItemGroup.Consumables => "Consumables",
         ItemGroup.CraftingMaterials => "Crafting materials",
         ItemGroup.Equipment => "Equipment",
-        ItemGroup.Tokens => "Tokens",
+        ItemGroup.Tokens => "Tokens (currency)",
         ItemGroup.Housing => "Housing",
-        ItemGroup.Collectibles => "Collectibles and unlocks",
+        ItemGroup.Collectibles => "Collectibles (minions, rolls, cards)",
         ItemGroup.Materia => "Materia",
         ItemGroup.Seasonal => "Seasonal",
         ItemGroup.Fishing => "Fishing tackle",
