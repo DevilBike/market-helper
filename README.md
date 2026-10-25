@@ -10,9 +10,18 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 ## Retainer organizing
 
-On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer as the catch-all. The most specific rule wins: a single item, then a category, then a group, then the catch-all. The Moves list shows what belongs elsewhere, including trades between characters, and can be searched and filtered (between retainers, from or back to your bags, trades). While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer per character as the catch-all. Each character has its own rules: a group or category lives in one retainer per character. The most specific rule wins: a single item, then a category, then a group, then the catch-all.
 
-At a summoning bell, **Check all retainers** opens each retainer's inventory in turn and records it, clicking through the greetings for you, with the same random delays as listing.
+By default each character's items stay with that character's retainers. Tick **Combine characters** to let rules send items to another character's retainers (those moves need trades); a rule on the item's own character still wins when two are equally specific.
+
+The Moves list shows what belongs elsewhere and can be searched and filtered. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+
+With the retainer list open at a summoning bell:
+
+- **Check all retainers** opens each retainer's inventory in turn and records it.
+- **Sort this character's retainers** takes everything that belongs elsewhere out of each retainer into your bags, then visits each destination and puts it in. If your bags fill up, run it again. Moves to another character still need a trade.
+
+Both click through the retainer greetings and use the same random delays as listing; the status line shows the current step.
 
 ## Inventory
 
