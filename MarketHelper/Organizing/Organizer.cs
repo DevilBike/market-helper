@@ -38,6 +38,10 @@ public class Organizer
         this.valuator = valuator;
     }
 
+    public static HashSet<uint> ListedBy(RetainerRef retainer) =>
+        retainer.Owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(LocationKind.RetainerMarket, retainer.Id))?
+            .Items.Select(s => s.ItemId).ToHashSet() ?? new HashSet<uint>();
+
     public static List<RetainerRef> Retainers(IEnumerable<CharacterRecord> characters) =>
         characters
             .SelectMany(c => c.Locations.Values
@@ -120,8 +124,13 @@ public class Organizer
 
         foreach (var from in active)
         {
+            // Stock of something this retainer has on the market board stays with it for relisting
+            var listed = ListedBy(from);
             foreach (var group in from.Location.Items.GroupBy(s => (s.ItemId, s.IsHq)))
             {
+                if (listed.Contains(group.Key.ItemId))
+                    continue;
+
                 var item = valuator.GetItem(group.Key.ItemId);
                 if (IsCarried(item, config) || IsSaddlebagged(item, config))
                 {
