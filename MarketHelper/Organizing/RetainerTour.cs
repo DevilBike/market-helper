@@ -10,6 +10,15 @@ using AddonSheet = Lumina.Excel.Sheets.Addon;
 
 namespace MarketHelper.Organizing;
 
+// What a Sort run will do: retainers to empty and fill, in list order
+public record SortPreview(
+    List<ulong> TakeFrom,
+    List<ulong> PutInto,
+    List<ulong> Order,
+    Dictionary<(uint, bool), ulong> Destination,
+    int Stacks,
+    bool Crystals);
+
 // At a summoning bell, opens each retainer's inventory in turn, to record it
 // or to carry out the planned moves for the current character
 public sealed unsafe class RetainerTour : IDisposable
@@ -38,8 +47,11 @@ public sealed unsafe class RetainerTour : IDisposable
     private readonly string entrustText;
     private readonly string quitText;
 
+    private const int MaxCrystals = 9999;
+
     // Slots already used during the current visit, in case the game hasn't shown the last move yet
     private readonly HashSet<(GameInventoryType, int)> taken = new();
+    private readonly Dictionary<(GameInventoryType, int), int> added = new();
 
     private string task = string.Empty;
     private int total;
@@ -129,18 +141,18 @@ public sealed unsafe class RetainerTour : IDisposable
         }
 
         foreach (var id in ids)
-            Visit(id, null);
+            Gate(id, () => true, null);
     }
 
-    // Two rounds: take out of every retainer whatever belongs elsewhere, then put it all away
-    public void SortAll()
+    // Works out what Sort would do, so it can be shown before anything moves
+    public SortPreview? PreviewSort()
     {
-        if (IsRunning || !CanStart)
-            return;
-
+        failure = null;
         var me = Plugin.PlayerState.ContentId;
-        var order = RetainerIdsInListOrder();
-        var plan = plugin.Organizer.Plan(plugin.Store.Characters.Values, plugin.Configuration);
+        var config = plugin.Configuration;
+        var ignored = config.RetainerRules.Where(r => r.Ignored).Select(r => r.RetainerId).ToHashSet();
+        var order = RetainerIdsInListOrder().Where(id => !ignored.Contains(id)).ToList();
+        var plan = plugin.Organizer.Plan(plugin.Store.Characters.Values, config);
         var moves = plan.Moves
             .Where(m => m.From.Owner.ContentId == me && m.To.Owner.ContentId == me)
             .ToList();
@@ -150,34 +162,69 @@ public sealed unsafe class RetainerTour : IDisposable
         foreach (var move in moves)
             destination[(move.Item.Id, move.IsHq)] = move.To.IsBags ? 0 : move.To.Id;
 
-        var takeFrom = moves.Where(m => !m.From.IsBags).Select(m => m.From.Id).Distinct().ToHashSet();
-        var putInto = moves.Where(m => !m.To.IsBags).Select(m => m.To.Id).Distinct().ToHashSet();
+        var takeFrom = moves.Where(m => !m.From.IsBags).Select(m => m.From.Id).ToHashSet();
+        var putInto = moves.Where(m => !m.To.IsBags).Select(m => m.To.Id).ToHashSet();
+        var crystals = config.StoreCrystals && PlayerHasCrystals();
 
-        var withdrawals = order.Where(takeFrom.Contains).ToList();
-        var deposits = order.Where(putInto.Contains).ToList();
-        Begin("Sorting", withdrawals.Count + deposits.Count);
-        if (total == 0)
+        var preview = new SortPreview(
+            order.Where(takeFrom.Contains).ToList(),
+            order.Where(putInto.Contains).ToList(),
+            order,
+            destination,
+            moves.Count,
+            crystals);
+
+        if (preview.Stacks == 0 && !crystals)
         {
             failure = "Nothing to move for this character.";
-            return;
+            return null;
         }
 
-        foreach (var id in withdrawals)
+        return preview;
+    }
+
+    // Two rounds: take out of every retainer whatever belongs elsewhere, then put it all away.
+    // Crystals go into the first retainer in the list that has room, then the next.
+    public void RunSort(SortPreview preview)
+    {
+        if (IsRunning || !CanStart)
+            return;
+
+        var deposits = preview.Crystals ? preview.Order : preview.PutInto;
+        Begin("Sorting", preview.TakeFrom.Count + deposits.Count);
+
+        foreach (var id in preview.TakeFrom)
         {
             var retainerId = id;
-            Visit(retainerId, () => Withdraw(retainerId, destination));
+            Gate(retainerId, () => true, () => Withdraw(retainerId, preview.Destination));
         }
 
+        var putInto = preview.PutInto.ToHashSet();
         foreach (var id in deposits)
         {
             var retainerId = id;
-            Visit(retainerId, () => Deposit(retainerId, destination));
+            Gate(retainerId,
+                 () => putInto.Contains(retainerId) || (preview.Crystals && PlayerHasCrystals()),
+                 () => Deposit(retainerId, preview.Destination).Concat(preview.Crystals ? StoreCrystals() : Enumerable.Empty<(string, Func<StepResult>, bool)>()));
         }
     }
 
-    private void Visit(ulong retainerId, Func<IEnumerable<(string, Func<StepResult>)>>? whileOpen)
+    // Decides when its turn comes whether the retainer still needs a visit
+    private void Gate(ulong retainerId, Func<bool> needed, Func<IEnumerable<(string, Func<StepResult>, bool)>>? whileOpen)
     {
-        runner.Add("Picking a retainer", () =>
+        runner.Add("Next retainer", () =>
+        {
+            if (needed())
+                runner.AddNext(Visit(retainerId, whileOpen));
+            else
+                done++;
+            return StepResult.Done;
+        }, false);
+    }
+
+    private List<(string, Func<StepResult>, bool)> Visit(ulong retainerId, Func<IEnumerable<(string, Func<StepResult>, bool)>>? whileOpen) =>
+    [
+        ("Picking a retainer", () =>
         {
             var list = GameUi.GetReady(ListAddon);
             if (list == null)
@@ -189,25 +236,27 @@ public sealed unsafe class RetainerTour : IDisposable
 
             GameUi.SelectRetainer(list, index);
             return StepResult.Done;
-        });
+        }, true),
 
-        runner.Add("Waiting for the retainer menu", () => PastTalk(MenuAddon), false);
+        ("Waiting for the retainer menu", () => PastTalk(MenuAddon), false),
+
         // Entrust is the first choice in the retainer menu, Quit the last, if the text can't be matched
-        runner.Add("Choosing Entrust or withdraw items", () => Choose(entrustText, first: true));
+        ("Choosing Entrust or withdraw items", () => Choose(entrustText, first: true), true),
 
-        runner.Add("Waiting for the retainer inventory", () =>
+        ("Waiting for the retainer inventory", () =>
         {
             if (OpenInventory() == null || !InventoryScanner.RetainerPagesLoaded())
                 return StepResult.Wait;
 
             plugin.Scanner.ScanNow();
             taken.Clear();
+            added.Clear();
             if (whileOpen != null)
                 runner.AddNext(whileOpen());
             return StepResult.Done;
-        }, false);
+        }, false),
 
-        runner.Add("Closing the retainer inventory", () =>
+        ("Closing the retainer inventory", () =>
         {
             plugin.Scanner.ScanNow();
             var inventory = OpenInventory();
@@ -215,47 +264,93 @@ public sealed unsafe class RetainerTour : IDisposable
                 return StepResult.Wait;
             inventory->Close(true);
             return StepResult.Done;
-        });
+        }, true),
 
-        runner.Add("Waiting for the retainer menu", () => PastTalk(MenuAddon), false);
-        runner.Add("Choosing Quit", () => Choose(quitText, first: false));
+        ("Waiting for the retainer menu", () => PastTalk(MenuAddon), false),
+        ("Choosing Quit", () => Choose(quitText, first: false), true),
 
-        runner.Add("Waiting for the retainer list", () =>
+        ("Waiting for the retainer list", () =>
         {
             var result = PastTalk(ListAddon);
             if (result == StepResult.Done)
                 done++;
             return result;
-        }, false);
-    }
+        }, false),
+    ];
 
-    // Retainer stacks that belong somewhere else go to empty bag slots
-    private IEnumerable<(string, Func<StepResult>)> Withdraw(ulong retainerId, Dictionary<(uint, bool), ulong> destination)
+    // Retainer stacks that belong somewhere else go to the bags
+    private IEnumerable<(string, Func<StepResult>, bool)> Withdraw(ulong retainerId, Dictionary<(uint, bool), ulong> destination)
     {
-        var steps = new List<(string, Func<StepResult>)>();
+        var steps = new List<(string, Func<StepResult>, bool)>();
         foreach (var slot in Read(RetainerPages))
         {
             if (!destination.TryGetValue((slot.ItemId, slot.IsHq), out var target) || target == retainerId)
                 continue;
 
             var name = plugin.Valuator.GetItem(slot.ItemId).Name;
-            steps.Add(($"Taking out {name}", () => MoveTo(slot, Bags, true)));
+            steps.Add(($"Taking out {name}", () => MoveTo(slot, Bags, true), true));
         }
 
         return steps;
     }
 
-    // Bag stacks that belong in this retainer go to its empty slots
-    private IEnumerable<(string, Func<StepResult>)> Deposit(ulong retainerId, Dictionary<(uint, bool), ulong> destination)
+    // Bag stacks that belong in this retainer go into it
+    private IEnumerable<(string, Func<StepResult>, bool)> Deposit(ulong retainerId, Dictionary<(uint, bool), ulong> destination)
     {
-        var steps = new List<(string, Func<StepResult>)>();
+        var steps = new List<(string, Func<StepResult>, bool)>();
         foreach (var slot in Read(Bags))
         {
             if (!destination.TryGetValue((slot.ItemId, slot.IsHq), out var target) || target != retainerId)
                 continue;
 
             var name = plugin.Valuator.GetItem(slot.ItemId).Name;
-            steps.Add(($"Putting in {name}", () => MoveTo(slot, RetainerPages, false)));
+            steps.Add(($"Putting in {name}", () => MoveTo(slot, RetainerPages, false), true));
+        }
+
+        return steps;
+    }
+
+    private static bool PlayerHasCrystals()
+    {
+        foreach (var item in Plugin.GameInventory.GetInventoryItems(GameInventoryType.Crystals))
+        {
+            if (!item.IsEmpty && item.Quantity > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    // Each kind of shard, crystal and cluster has the same slot in your crystals and the retainer's.
+    // A kind goes in only if all of it fits, otherwise it waits for the next retainer.
+    private IEnumerable<(string, Func<StepResult>, bool)> StoreCrystals()
+    {
+        var steps = new List<(string, Func<StepResult>, bool)>();
+        var mine = Plugin.GameInventory.GetInventoryItems(GameInventoryType.Crystals);
+        for (var i = 0; i < mine.Length; i++)
+        {
+            if (mine[i].IsEmpty || mine[i].Quantity == 0)
+                continue;
+
+            var slot = i;
+            var name = plugin.Valuator.GetItem(mine[i].BaseItemId).Name;
+            steps.Add(($"Storing {name}", () =>
+            {
+                var have = Plugin.GameInventory.GetInventoryItems(GameInventoryType.Crystals);
+                var stored = Plugin.GameInventory.GetInventoryItems(GameInventoryType.RetainerCrystals);
+                if (slot >= have.Length || slot >= stored.Length || have[slot].IsEmpty)
+                    return StepResult.Done;
+
+                var already = stored[slot].IsEmpty ? 0 : stored[slot].Quantity;
+                if (already + have[slot].Quantity > MaxCrystals)
+                    return StepResult.Done;
+
+                InventoryManager.Instance()->MoveItemSlot(
+                    InventoryType.Crystals, (ushort)slot,
+                    InventoryType.RetainerCrystals, (ushort)slot, true);
+                moved++;
+                return StepResult.Done;
+            }, true));
         }
 
         return steps;
@@ -268,7 +363,8 @@ public sealed unsafe class RetainerTour : IDisposable
         if (now.IsEmpty || now.BaseItemId != slot.ItemId || now.IsHq != slot.IsHq)
             return StepResult.Done;
 
-        if (FirstEmpty(containers) is not { } target)
+        var moving = slot with { Quantity = (int)now.Quantity };
+        if (SlotFor(containers, moving) is not { } target)
         {
             if (toBags)
                 bagsFull = true;
@@ -280,6 +376,33 @@ public sealed unsafe class RetainerTour : IDisposable
             (InventoryType)target.Container, (ushort)target.Slot, true);
         moved++;
         return StepResult.Done;
+    }
+
+    // Tops up a partial stack of the same item when the whole stack fits, otherwise an empty slot
+    private (GameInventoryType Container, int Slot)? SlotFor(GameInventoryType[] containers, BagSlot moving)
+    {
+        var stackSize = plugin.Valuator.GetItem(moving.ItemId).StackSize;
+        if (stackSize > 1)
+        {
+            foreach (var container in containers)
+            {
+                foreach (var item in Plugin.GameInventory.GetInventoryItems(container))
+                {
+                    if (item.IsEmpty || item.BaseItemId != moving.ItemId || item.IsHq != moving.IsHq)
+                        continue;
+
+                    var key = (container, (int)item.InventorySlot);
+                    var planned = item.Quantity + added.GetValueOrDefault(key);
+                    if (planned + moving.Quantity > stackSize)
+                        continue;
+
+                    added[key] = added.GetValueOrDefault(key) + moving.Quantity;
+                    return key;
+                }
+            }
+        }
+
+        return FirstEmpty(containers);
     }
 
     private static List<BagSlot> Read(GameInventoryType[] containers)

@@ -26,6 +26,12 @@ public class Configuration : IPluginConfiguration
     // Off: each character's items stay with that character's retainers. On: rules apply across characters
     public bool CombineCharacters { get; set; } = false;
 
+    // Rules of this character are copied, by retainer order, to characters that have none yet
+    public ulong TemplateOwnerId { get; set; }
+
+    // Sorting also puts your shards and crystals into retainers, top of the list first
+    public bool StoreCrystals { get; set; } = true;
+
     // Items and groups that stay in your bags
     public HashSet<uint> CarryItemIds { get; set; } = new();
     public HashSet<ItemGroup> CarryGroups { get; set; } = new();
@@ -98,4 +104,23 @@ public class RetainerRule
 
     // Gets anything from its character without a more specific rule
     public bool CatchAll { get; set; }
+
+    // Left out of organizing entirely
+    public bool Ignored { get; set; }
+
+    // Where new stacks go once this retainer is full
+    public ulong OverflowRetainerId { get; set; }
+
+    public bool HasRules => Groups.Count > 0 || UiCategories.Count > 0 || ItemIds.Count > 0 || CatchAll || Ignored;
+
+    public RetainerRule CopyFor(ulong retainerId, ulong overflowRetainerId) => new()
+    {
+        RetainerId = retainerId,
+        Groups = new HashSet<ItemGroup>(Groups),
+        UiCategories = new HashSet<uint>(UiCategories),
+        ItemIds = new HashSet<uint>(ItemIds),
+        CatchAll = CatchAll,
+        Ignored = Ignored,
+        OverflowRetainerId = overflowRetainerId,
+    };
 }

@@ -96,8 +96,7 @@ public sealed unsafe class InventoryScanner : IDisposable
             return;
         nextScan = now + ScanInterval;
 
-        if (Plugin.Instance.Configuration.DetectRetainers)
-            DetectRetainers();
+        DetectRetainers(Plugin.Instance.Configuration.DetectRetainers);
 
         // Retainer windows don't always raise inventory events when they open
         var retainerOpen = IsRetainerInventoryOpen();
@@ -154,7 +153,8 @@ public sealed unsafe class InventoryScanner : IDisposable
 
     // Adds every retainer the game knows about for this character, so they show up
     // in the Retainers tab before their inventory has been opened
-    private void DetectRetainers()
+    // Records the game's retainer order, and adds retainers not seen yet when asked to
+    private void DetectRetainers(bool addNew)
     {
         var player = Plugin.PlayerState;
         var manager = RetainerManager.Instance();
@@ -163,30 +163,36 @@ public sealed unsafe class InventoryScanner : IDisposable
 
         var record = store.GetOrAdd(player.ContentId);
         var changed = false;
-        foreach (ref readonly var retainer in manager->Retainers)
+        for (uint order = 0; order < 10; order++)
         {
-            if (retainer.RetainerId == 0)
+            var retainer = manager->GetRetainerBySortedIndex(order);
+            if (retainer == null || retainer->RetainerId == 0)
                 continue;
 
-            var name = retainer.NameString;
+            var name = retainer->NameString;
             if (name.Length == 0)
                 continue;
 
-            var key = CharacterRecord.LocationKey(LocationKind.Retainer, retainer.RetainerId);
+            var key = CharacterRecord.LocationKey(LocationKind.Retainer, retainer->RetainerId);
             if (!record.Locations.TryGetValue(key, out var location))
             {
+                if (!addNew)
+                    continue;
+
                 record.Locations[key] = new Location
                 {
                     Kind = LocationKind.Retainer,
-                    RetainerId = retainer.RetainerId,
+                    RetainerId = retainer->RetainerId,
                     RetainerName = name,
+                    Order = (int)order,
                     UpdatedUtc = DateTime.MinValue,
                 };
                 changed = true;
             }
-            else if (location.RetainerName != name)
+            else if (location.RetainerName != name || location.Order != order)
             {
                 location.RetainerName = name;
+                location.Order = (int)order;
                 changed = true;
             }
         }
@@ -218,17 +224,26 @@ public sealed unsafe class InventoryScanner : IDisposable
         }
 
         var key = CharacterRecord.LocationKey(kind, retainerId);
+        var now = DateTime.UtcNow;
         if (record.Locations.TryGetValue(key, out var existing) &&
             existing.RetainerName == retainerName && existing.UpdatedUtc != DateTime.MinValue &&
             SameItems(existing.Items, items))
-            return false;
+        {
+            // Nothing changed; note that it was looked at, without saving every second
+            if (now - existing.CheckedUtc < TimeSpan.FromMinutes(1))
+                return false;
+            existing.CheckedUtc = now;
+            return true;
+        }
 
         record.Locations[key] = new Location
         {
             Kind = kind,
             RetainerId = retainerId,
             RetainerName = retainerName,
-            UpdatedUtc = DateTime.UtcNow,
+            Order = existing?.Order ?? 99,
+            CheckedUtc = now,
+            UpdatedUtc = now,
             Items = items,
         };
         return true;

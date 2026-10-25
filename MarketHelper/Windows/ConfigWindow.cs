@@ -4,6 +4,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using MarketHelper.Inventory;
+using Newtonsoft.Json;
 
 namespace MarketHelper.Windows;
 
@@ -34,6 +35,49 @@ public class ConfigWindow : Window, IDisposable
 
         if (ImGui.CollapsingHeader("Recorded characters"))
             DrawCharacters();
+
+        if (ImGui.CollapsingHeader("Backup"))
+            DrawBackup();
+    }
+
+    private string backupStatus = string.Empty;
+
+    // All settings and rules as text, to paste somewhere safe and bring back after a reinstall
+    private void DrawBackup()
+    {
+        ImGui.TextWrapped("Copies all settings and retainer rules as text. Paste it into a text file to keep it.");
+        if (ImGui.Button("Copy settings to clipboard"))
+        {
+            ImGui.SetClipboardText(JsonConvert.SerializeObject(configuration, Formatting.Indented));
+            backupStatus = "Copied.";
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Restore from clipboard"))
+        {
+            try
+            {
+                var text = ImGui.GetClipboardText();
+                if (JsonConvert.DeserializeObject<Configuration>(text) == null)
+                    throw new JsonException("empty");
+
+                JsonConvert.PopulateObject(text, configuration, new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace,
+                });
+                configuration.Migrate();
+                configuration.Save();
+                backupStatus = "Restored.";
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Warning(ex, "Settings restore failed");
+                backupStatus = "The clipboard doesn't hold Market Helper settings.";
+            }
+        }
+
+        if (backupStatus.Length > 0)
+            ImGui.TextUnformatted(backupStatus);
     }
 
     private void DrawValuation()

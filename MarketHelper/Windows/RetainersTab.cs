@@ -38,6 +38,16 @@ public class RetainersTab
     private string spreadSearch = string.Empty;
     private int spreadMax = 99;
 
+    // Sort waits on this preview until Go is pressed
+    private SortPreview? pendingSort;
+    private bool confirmCopy;
+
+    // How many stacks the viewed character has per group and category, and the biggest categories without a rule
+    private ulong sizesOwner;
+    private Dictionary<ItemGroup, int> groupSizes = new();
+    private Dictionary<uint, int> categorySizes = new();
+    private List<(uint Id, int Stacks)> suggestions = new();
+
     public RetainersTab(Plugin plugin)
     {
         this.plugin = plugin;
@@ -59,7 +69,9 @@ public class RetainersTab
         {
             nextRefresh = DateTime.UtcNow + PlanRefreshInterval;
             retainers = Organizer.Retainers(plugin.Store.Characters.Values);
+            CopyTemplateToNewCharacters();
             plan = plugin.Organizer.Plan(plugin.Store.Characters.Values, plugin.Configuration);
+            sizesOwner = 0;
         }
 
         DrawTour();
@@ -73,7 +85,13 @@ public class RetainersTab
         DrawOpenRetainer();
 
         var owner = DrawCharacterPicker();
-        var shown = retainers.Where(r => r.Owner.ContentId == owner).ToList();
+        if (sizesOwner != owner)
+            ComputeSizes(owner);
+
+        // In game order, with ignored retainers at the bottom
+        var shown = retainers.Where(r => r.Owner.ContentId == owner)
+            .OrderBy(r => IsIgnored(r.Id)).ThenBy(r => r.Location.Order).ThenBy(r => r.Name)
+            .ToList();
         var moves = plan.Moves.Where(m => m.From.Owner.ContentId == owner || m.To.Owner.ContentId == owner).ToList();
 
         using (var tabs = ImRaii.TabBar("RetainerSubTabs"))
@@ -114,13 +132,30 @@ public class RetainersTab
             return;
         }
 
+        if (pendingSort is { } preview)
+        {
+            DrawSortPreview(preview);
+            return;
+        }
+
         if (RetainerTour.CanStart)
         {
             if (ImGui.Button("Check all retainers"))
                 tour.CheckAll();
             ImGui.SameLine();
             if (ImGui.Button("Sort this character's retainers"))
-                tour.SortAll();
+                pendingSort = tour.PreviewSort();
+            ImGui.SameLine();
+            var crystals = plugin.Configuration.StoreCrystals;
+            if (ImGui.Checkbox("Store crystals too", ref crystals))
+            {
+                plugin.Configuration.StoreCrystals = crystals;
+                plugin.Configuration.Save();
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Shards, crystals and clusters go into the first retainer in the list, then the next once it's full.");
+
             ImGui.SameLine();
             ImGui.TextDisabled("(?)");
             if (ImGui.IsItemHovered())
@@ -135,6 +170,34 @@ public class RetainersTab
 
         if (tour.Status.Length > 0)
             ImGui.TextUnformatted(tour.Status);
+    }
+
+    private void DrawSortPreview(SortPreview preview)
+    {
+        string Names(IEnumerable<ulong> ids) =>
+            string.Join(", ", ids.Select(id => retainers.Find(r => r.Id == id)?.Name ?? "?"));
+
+        Colored(Highlight, $"Sort will move {preview.Stacks} kinds of items for this character:");
+        if (preview.TakeFrom.Count > 0)
+            ImGui.TextWrapped($"Take out of: {Names(preview.TakeFrom)}");
+        if (preview.PutInto.Count > 0)
+            ImGui.TextWrapped($"Put into: {Names(preview.PutInto)}");
+        if (preview.Crystals)
+            ImGui.TextWrapped($"Crystals: into {Names(preview.Order.Take(1))} first, then down the list as retainers fill.");
+
+        using (ImRaii.Disabled(!RetainerTour.CanStart))
+        {
+            if (ImGui.Button("Go"))
+            {
+                plugin.RetainerTour.RunSort(preview);
+                pendingSort = null;
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel"))
+            pendingSort = null;
+        ImGui.Separator();
     }
 
     // While a retainer is open, show exactly what to take out of it and put into it
@@ -285,9 +348,12 @@ public class RetainersTab
 
                     var stacks = plan.StacksAfter.GetValueOrDefault(retainer.Id, retainer.Location.Items.Count);
                     var catchAll = config.RetainerRules.Find(r => r.RetainerId == retainer.Id)?.CatchAll == true ? " *" : "";
-                    var unscanned = retainer.Scanned ? "" : " (not opened yet)";
-                    if (ImGui.Selectable($"{retainer.Label}{catchAll}{unscanned}##{retainer.Id}", selected == retainer.Id))
-                        selected = retainer.Id;
+                    var seen = retainer.Scanned ? $" ({Age(retainer.Location.LastSeenUtc)})" : " (not opened yet)";
+                    using (ImRaii.PushColor(ImGuiCol.Text, ImGui.GetColorU32(ImGuiCol.TextDisabled), IsIgnored(retainer.Id)))
+                    {
+                        if (ImGui.Selectable($"{retainer.Name}{catchAll}{seen}##{retainer.Id}", selected == retainer.Id))
+                            selected = retainer.Id;
+                    }
 
                     if (stacks > Organizer.RetainerSlots)
                     {
@@ -319,6 +385,18 @@ public class RetainersTab
 
         var rule = config.GetRule(current.Id);
 
+        var ignore = rule.Ignored;
+        if (ImGui.Checkbox("Ignore this retainer (nothing is taken out or put in)", ref ignore))
+        {
+            rule.Ignored = ignore;
+            Save();
+        }
+
+        if (rule.Ignored)
+            return;
+
+        DrawOverflow(current, rule);
+
         var isCatchAll = rule.CatchAll;
         if (ImGui.Checkbox($"Catch-all: store anything of {current.Owner.Name}'s without a rule here", ref isCatchAll))
         {
@@ -333,10 +411,175 @@ public class RetainersTab
             DrawRuleGroups(config, current, rule);
 
         if (ImGui.CollapsingHeader($"Categories stored here ({rule.UiCategories.Count})###rulecategories"))
+        {
             DrawRuleCategories(config, current, rule);
+            DrawSuggestions(current, rule);
+        }
 
         if (ImGui.CollapsingHeader($"Single items stored here ({rule.ItemIds.Count})###ruleitems"))
             DrawRuleItems(rule);
+
+        if (ImGui.CollapsingHeader("Copy to other characters###copyrules"))
+            DrawCopyRules(current.Owner);
+    }
+
+    private void DrawOverflow(RetainerRef current, RetainerRule rule)
+    {
+        var others = retainers.Where(r => r.Owner.ContentId == current.Owner.ContentId && r.Id != current.Id && !IsIgnored(r.Id)).ToList();
+        var label = others.Find(r => r.Id == rule.OverflowRetainerId)?.Name ?? "None";
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        using var combo = ImRaii.Combo("When full, overflow into", label);
+        if (!combo.Success)
+            return;
+
+        if (ImGui.Selectable("None", rule.OverflowRetainerId == 0))
+        {
+            rule.OverflowRetainerId = 0;
+            Save();
+        }
+
+        foreach (var other in others)
+        {
+            if (ImGui.Selectable($"{other.Name}##overflow{other.Id}", rule.OverflowRetainerId == other.Id))
+            {
+                rule.OverflowRetainerId = other.Id;
+                Save();
+            }
+        }
+    }
+
+    // Copies each retainer's rules to the retainer in the same list position on other characters
+    private void DrawCopyRules(CharacterRecord source)
+    {
+        var config = plugin.Configuration;
+        ImGui.TextWrapped($"The first retainer in {source.Name}'s list gets copied to the first retainer of each other character, the second to the second, and so on. This replaces their rules.");
+
+        if (ImGui.Button(confirmCopy ? "Click again to replace the other characters' rules" : "Copy to all other characters"))
+        {
+            if (confirmCopy)
+            {
+                foreach (var target in retainers.Select(r => r.Owner).DistinctBy(o => o.ContentId).Where(o => o.ContentId != source.ContentId))
+                    CopyRules(source, target);
+                confirmCopy = false;
+                Save();
+            }
+            else
+            {
+                confirmCopy = true;
+            }
+        }
+
+        var auto = config.TemplateOwnerId == source.ContentId;
+        if (ImGui.Checkbox("Also copy to characters that have no rules yet, automatically", ref auto))
+        {
+            config.TemplateOwnerId = auto ? source.ContentId : 0;
+            Save();
+        }
+    }
+
+    private void CopyRules(CharacterRecord source, CharacterRecord target)
+    {
+        var config = plugin.Configuration;
+        var from = InOrder(source);
+        var to = InOrder(target);
+        for (var i = 0; i < to.Count; i++)
+        {
+            config.RetainerRules.RemoveAll(r => r.RetainerId == to[i].Id);
+            if (i >= from.Count)
+                continue;
+
+            var rule = config.RetainerRules.Find(r => r.RetainerId == from[i].Id);
+            if (rule == null)
+                continue;
+
+            var overflowIndex = from.FindIndex(r => r.Id == rule.OverflowRetainerId);
+            var overflow = overflowIndex >= 0 && overflowIndex < to.Count ? to[overflowIndex].Id : 0;
+            config.RetainerRules.Add(rule.CopyFor(to[i].Id, overflow));
+        }
+    }
+
+    private void CopyTemplateToNewCharacters()
+    {
+        var config = plugin.Configuration;
+        if (config.TemplateOwnerId == 0)
+            return;
+
+        var owners = retainers.Select(r => r.Owner).DistinctBy(o => o.ContentId).ToList();
+        var source = owners.Find(o => o.ContentId == config.TemplateOwnerId);
+        if (source == null)
+            return;
+
+        var copied = false;
+        foreach (var target in owners.Where(o => o.ContentId != source.ContentId))
+        {
+            var ids = InOrder(target).Select(r => r.Id).ToHashSet();
+            if (config.RetainerRules.Any(r => ids.Contains(r.RetainerId) && r.HasRules))
+                continue;
+
+            CopyRules(source, target);
+            copied = true;
+        }
+
+        if (copied)
+            config.Save();
+    }
+
+    private List<RetainerRef> InOrder(CharacterRecord owner) =>
+        retainers.Where(r => r.Owner.ContentId == owner.ContentId).OrderBy(r => r.Location.Order).ThenBy(r => r.Name).ToList();
+
+    private bool IsIgnored(ulong retainerId) =>
+        plugin.Configuration.RetainerRules.Find(r => r.RetainerId == retainerId)?.Ignored == true;
+
+    private static string Age(DateTime utc)
+    {
+        var age = DateTime.UtcNow - utc;
+        if (age.TotalMinutes < 1)
+            return "just now";
+        if (age.TotalHours < 1)
+            return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalDays < 1)
+            return $"{(int)age.TotalHours}h ago";
+        return $"{(int)age.TotalDays}d ago";
+    }
+
+    // Stack counts per group and category over the character's bags, saddlebags and retainers
+    private void ComputeSizes(ulong owner)
+    {
+        sizesOwner = owner;
+        groupSizes = new Dictionary<ItemGroup, int>();
+        categorySizes = new Dictionary<uint, int>();
+        if (!plugin.Store.Characters.TryGetValue(owner, out var character))
+        {
+            suggestions = new List<(uint, int)>();
+            return;
+        }
+
+        var kinds = new[] { LocationKind.Bags, LocationKind.Saddlebag, LocationKind.Retainer };
+        var items = character.Locations.Values
+            .Where(l => kinds.Contains(l.Kind))
+            .SelectMany(l => l.Items)
+            .Select(i => plugin.Valuator.GetItem(i.ItemId))
+            .ToList();
+
+        foreach (var item in items)
+        {
+            if (item.Group != ItemGroup.None)
+                groupSizes[item.Group] = groupSizes.GetValueOrDefault(item.Group) + 1;
+            categorySizes[item.UiCategory] = categorySizes.GetValueOrDefault(item.UiCategory) + 1;
+        }
+
+        var ids = retainers.Where(r => r.Owner.ContentId == owner).Select(r => r.Id).ToHashSet();
+        var rules = plugin.Configuration.RetainerRules.Where(r => ids.Contains(r.RetainerId) && !r.Ignored).ToList();
+        suggestions = items
+            .Where(i => i.UiCategory != 0 && !Organizer.IsCarried(i, plugin.Configuration))
+            .Where(i => !rules.Any(r => r.ItemIds.Contains(i.Id) || r.UiCategories.Contains(i.UiCategory) ||
+                                        (i.Group != ItemGroup.None && r.Groups.Contains(i.Group))))
+            .GroupBy(i => i.UiCategory)
+            .Select(g => (g.Key, g.Count()))
+            .Where(c => c.Item2 >= 3)
+            .OrderByDescending(c => c.Item2)
+            .Take(8)
+            .ToList();
     }
 
     private void DrawRuleGroups(Configuration config, RetainerRef current, RetainerRule rule)
@@ -349,7 +592,8 @@ public class RetainersTab
             var elsewhere = owner != null && !here
                 ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
                 : "";
-            if (ImGui.Checkbox($"{ItemGroups.Label(group)}{elsewhere}##group{group}", ref here))
+            var size = groupSizes.GetValueOrDefault(group);
+            if (ImGui.Checkbox($"{ItemGroups.Label(group)} ({size} stacks){elsewhere}##group{group}", ref here))
             {
                 // A group lives in one retainer per character
                 foreach (var other in RulesOfOwner(current))
@@ -370,7 +614,7 @@ public class RetainersTab
             if (ImGui.SmallButton($"x##cat{id}"))
                 removeCategory = id;
             ImGui.SameLine();
-            ImGui.TextUnformatted(CategoryName(id));
+            ImGui.TextUnformatted($"{CategoryName(id)} ({categorySizes.GetValueOrDefault(id)} stacks)");
         }
 
         if (removeCategory is { } rc)
@@ -396,7 +640,8 @@ public class RetainersTab
                     var suffix = owner != null && owner.RetainerId != current.Id
                         ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
                         : group != ItemGroup.None ? $" (in {ItemGroups.Label(group)})" : "";
-                    if (ImGui.Selectable($"{name}{suffix}##addcat{id}", rule.UiCategories.Contains(id)))
+                    var size = categorySizes.GetValueOrDefault(id);
+                    if (ImGui.Selectable($"{name} ({size}){suffix}##addcat{id}", rule.UiCategories.Contains(id)))
                     {
                         // A category lives in one retainer per character
                         foreach (var other in RulesOfOwner(current))
@@ -406,6 +651,29 @@ public class RetainersTab
                     }
                 }
             }
+        }
+    }
+
+    // The biggest categories this character has that no rule covers yet
+    private void DrawSuggestions(RetainerRef current, RetainerRule rule)
+    {
+        if (suggestions.Count == 0)
+            return;
+
+        ImGui.Spacing();
+        ImGui.TextDisabled("Biggest categories without a rule:");
+        foreach (var (id, stacks) in suggestions)
+        {
+            if (ImGui.SmallButton($"Add##suggest{id}"))
+            {
+                foreach (var other in RulesOfOwner(current))
+                    other.UiCategories.Remove(id);
+                rule.UiCategories.Add(id);
+                Save();
+            }
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted($"{CategoryName(id)} ({stacks} stacks)");
         }
     }
 
@@ -530,6 +798,7 @@ public class RetainersTab
     private void Save()
     {
         plugin.Configuration.Save();
+        sizesOwner = 0;
         Invalidate();
     }
 

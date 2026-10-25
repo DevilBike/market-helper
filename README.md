@@ -16,10 +16,12 @@ The tab shows one character at a time (the one you're logged in as, unless you p
 
 The Moves list shows what belongs elsewhere and can be searched and filtered. **Across characters** lists tradable items that several characters hold in small amounts, and which character has the most, so you can trade them together. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
+Retainers are listed in their in-game order, with how long ago each was last checked. Each group and category shows how many stacks the character has of it, and the biggest categories without a rule are suggested with an Add button. A retainer can be ignored (it's left alone and shown greyed out at the bottom) or given an overflow retainer that takes new stacks once it's full. **Copy to other characters** copies each retainer's rules to the retainer in the same list position on your other characters, and can do so automatically for characters with no rules yet.
+
 With the retainer list open at a summoning bell:
 
 - **Check all retainers** opens each retainer's inventory in turn and records it.
-- **Sort this character's retainers** takes everything that belongs elsewhere out of each retainer into your bags, then visits each destination and puts it in. If your bags fill up, run it again. Moves to another character still need a trade.
+- **Sort this character's retainers** first shows what it will do, then on **Go** takes everything that belongs elsewhere out of each retainer into your bags, visits each destination and puts it in, topping up partial stacks before using empty slots. If your bags fill up, run it again. With **Store crystals too**, your shards, crystals and clusters go into the first retainer in the list, then the next as each fills (a kind only goes in when all of it fits). Moves to another character still need a trade.
 
 Both click through the retainer greetings and use the same random delays as listing; the status line shows the current step.
 
@@ -42,6 +44,8 @@ Open a retainer at a summoning bell and choose "Sell items in your inventory on 
 - **Reprice all listings** opens each listing, compares prices, and sets it to the lowest price from someone else minus your undercut.
 - **List selected items** puts bag items marked Sell on MB up for sale the same way, filling the retainer's free slots.
 
+**Sell to the vendor** has the retainer sell every bag item marked Vendor (except items you keep on you) in one click.
+
 HQ items are priced against HQ listings only. Your own retainers on any character are never undercut. An item is left alone if the market is at or below the vendor price, or if the lowest listing is below the "% of average" safety setting. Every action waits a random time between the min and max delay in settings.
 
 ## Install
@@ -51,7 +55,7 @@ HQ items are priced against HQ listings only. Your own retainers on any characte
    `https://github.com/DevilBike/market-helper/releases/latest/download/repo.json`,
    tick **Enabled**, and click **Save and Close**.
 3. Type `/xlplugins`, search for **Market Helper**, and install it.
-4. Type `/mhelper` to open it, or `/mhelper config` for settings.
+4. Type `/mhelper` to open it, or `/mhelper config` for settings. Settings > Backup copies your settings and rules to the clipboard and restores them.
 
 Every push to `main` builds a new release, and Dalamud picks up the update automatically.
 
