@@ -10,7 +10,7 @@ namespace MarketHelper.Organizing;
 // with times, so slow or wasted steps can be spotted and the next version tuned
 public sealed class SortLog
 {
-    private const int RunsKept = 10;
+    private const int RunsKept = 50;
     private const string RunMarker = "=== ";
 
     private readonly string path;
@@ -83,6 +83,24 @@ public sealed class SortLog
         {
             Plugin.Log.Error(ex, "Couldn't read the sort log");
             return string.Empty;
+        }
+    }
+
+    // Saved runs, newest first, as their title line and full text
+    public List<(string Title, string Text)> Runs()
+    {
+        try
+        {
+            var text = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            return SplitRuns(text)
+                .Select(run => (Title: run.Split('\n')[0].TrimEnd('\r').Replace(RunMarker, string.Empty), Text: run))
+                .Reverse()
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Couldn't read the sort log");
+            return new List<(string, string)>();
         }
     }
 

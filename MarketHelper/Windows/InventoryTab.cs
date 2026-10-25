@@ -39,6 +39,12 @@ public class InventoryTab
                 DrawCarry();
         }
 
+        using (var tab = ImRaii.TabItem("Cleanup ideas"))
+        {
+            if (tab.Success)
+                DrawCleanup();
+        }
+
         using (var tab = ImRaii.TabItem("Armory cleanup"))
         {
             if (tab.Success)
@@ -257,6 +263,96 @@ public class InventoryTab
                     Config.Save();
                 }
             }
+        }
+    }
+
+    // Things worth getting rid of to free slots: kinds you only have a few of, and old items.
+    // Items on any keep list are left out.
+    private void DrawCleanup()
+    {
+        if (!plugin.Store.Characters.TryGetValue(Plugin.PlayerState.ContentId, out var character))
+        {
+            ImGui.TextDisabled("Log in to see suggestions for this character.");
+            return;
+        }
+
+        ImGui.TextWrapped("Suggestions for freeing slots on this character. Sell, vendor or discard what you don't need; nothing here is moved for you.");
+
+        var kinds = new[] { LocationKind.Bags, LocationKind.Saddlebag, LocationKind.Retainer };
+        var held = character.Locations.Values
+            .Where(l => kinds.Contains(l.Kind))
+            .SelectMany(l => l.Items.Select(s => (Location: l, Stack: s)))
+            .GroupBy(x => x.Stack.ItemId)
+            .Select(g => (
+                Item: plugin.Valuator.GetItem(g.Key),
+                Quantity: g.Sum(x => x.Stack.Quantity),
+                Stacks: g.Count(),
+                First: g.First(),
+                Where: string.Join(", ", g.Select(x => ValuationTab.LocationLabel(x.Location)).Distinct())))
+            .Where(r => !IsKept(r.Item))
+            .ToList();
+
+        var small = Config.SmallQuantity;
+        ImGui.SetNextItemWidth(120 * ImGuiHelpers.GlobalScale);
+        if (ImGui.SliderInt("Few: this many or fewer##smallqty", ref small, 1, 50))
+        {
+            Config.SmallQuantity = small;
+            Config.Save();
+        }
+
+        var smallRows = held.Where(r => r.Item.StackSize > 1 && r.Quantity <= small)
+            .OrderBy(r => r.Quantity).ThenBy(r => r.Item.Name).ToList();
+        if (ImGui.CollapsingHeader($"Small amounts ({smallRows.Count} slots)###cleansmall", ImGuiTreeNodeFlags.DefaultOpen))
+            DrawCleanupRows(character, smallRows.Select(r => (r.Item, r.Quantity, r.Stacks, r.First, r.Where)), "small");
+
+        var level = Config.OldItemLevel;
+        ImGui.SetNextItemWidth(120 * ImGuiHelpers.GlobalScale);
+        if (ImGui.SliderInt("Old: below item level##oldlevel", ref level, 50, 800))
+        {
+            Config.OldItemLevel = level;
+            Config.Save();
+        }
+
+        var oldRows = held.Where(r => r.Item.ItemLevel > 1 && r.Item.ItemLevel < level)
+            .OrderBy(r => r.Item.ItemLevel).ThenBy(r => r.Item.Name).ToList();
+        if (ImGui.CollapsingHeader($"Old items ({oldRows.Sum(r => r.Stacks)} slots)###cleanold"))
+            DrawCleanupRows(character, oldRows.Select(r => (r.Item, r.Quantity, r.Stacks, r.First, r.Where)), "old");
+    }
+
+    private bool IsKept(ItemInfo item) =>
+        Config.KeepItemIds.Contains(item.Id) || Config.TopUpItemIds.Contains(item.Id) ||
+        Organizer.IsCarried(item, Config) || Organizer.IsSaddlebagged(item, Config);
+
+    private void DrawCleanupRows(CharacterRecord character,
+        IEnumerable<(ItemInfo Item, int Quantity, int Stacks, (Location Location, ItemStack Stack) First, string Where)> rows, string id)
+    {
+        using var table = ImRaii.Table($"cleanup{id}", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable,
+                                       new System.Numerics.Vector2(0, 250 * ImGuiHelpers.GlobalScale));
+        if (!table.Success)
+            return;
+
+        ImGui.TableSetupColumn("Item");
+        ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 60 * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("iLvl", ImGuiTableColumnFlags.WidthFixed, 40 * ImGuiHelpers.GlobalScale);
+        ImGui.TableSetupColumn("Worth");
+        ImGui.TableSetupColumn("Where");
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableHeadersRow();
+
+        foreach (var (item, quantity, stacks, first, where) in rows)
+        {
+            var value = plugin.Valuator.EvaluateStack(character, first.Location, item, first.Stack.IsHq, quantity, Config);
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(item.Name);
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(stacks > 1 ? $"{quantity} ({stacks} slots)" : quantity.ToString());
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(item.ItemLevel.ToString());
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(value.UnitPrice > 0 ? $"~{value.UnitPrice:N0} each ({value.Verdict})" : $"{value.Verdict}");
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(where);
         }
     }
 

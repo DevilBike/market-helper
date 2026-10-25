@@ -71,6 +71,7 @@ public sealed unsafe class RetainerTour : IDisposable
     private int round;
     private int movedAtRoundStart;
     private int remaining;
+    private int idleRounds;
     private string? failure;
 
     public bool IsRunning => runner.IsRunning;
@@ -145,6 +146,7 @@ public sealed unsafe class RetainerTour : IDisposable
         moved = 0;
         round = 0;
         remaining = 0;
+        idleRounds = 0;
         bagsFull = false;
         failure = null;
         Log.Begin($"{name} for {Plugin.PlayerState.CharacterName}");
@@ -310,7 +312,10 @@ public sealed unsafe class RetainerTour : IDisposable
             failure = null;
             remaining = next?.Stacks ?? 0;
             Log.Add($"Round {round} done: moved {moved - movedAtRoundStart} stacks, {remaining} kinds left, bags {UsedSlots(Bags)}/140 used");
-            if (next != null && next.Stacks > 0 && moved > movedAtRoundStart && round < MaxRounds)
+            // A round in one direction can find nothing to carry while the other direction still can,
+            // so stop only after a round each way has moved nothing
+            idleRounds = moved > movedAtRoundStart ? 0 : idleRounds + 1;
+            if (next != null && next.Stacks > 0 && idleRounds < 2 && round < MaxRounds)
             {
                 QueueRound(next with { Crystals = false });
                 return StepResult.Done;
