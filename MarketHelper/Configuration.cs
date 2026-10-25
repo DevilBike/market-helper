@@ -8,7 +8,7 @@ namespace MarketHelper;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 
     // Valuation thresholds
     public int MinMarketValue { get; set; } = 1000;
@@ -19,7 +19,12 @@ public class Configuration : IPluginConfiguration
 
     // Retainer organizing
     public List<RetainerRule> RetainerRules { get; set; } = new();
+
+    // Only read when moving old settings over; each rule has its own CatchAll now
     public ulong CatchAllRetainerId { get; set; }
+
+    // Off: each character's items stay with that character's retainers. On: rules apply across characters
+    public bool CombineCharacters { get; set; } = false;
 
     // Items and groups that stay in your bags
     public HashSet<uint> CarryItemIds { get; set; } = new();
@@ -39,9 +44,9 @@ public class Configuration : IPluginConfiguration
     public int MinActionDelayMs { get; set; } = 400;
     public int MaxActionDelayMs { get; set; } = 1200;
 
-    // Version 0 had slower listing delays; move people still on those defaults to the new ones
     public void Migrate()
     {
+        // Version 0 had slower listing delays; move people still on those defaults to the new ones
         if (Version < 1)
         {
             if (MinActionDelayMs == 800 && MaxActionDelayMs == 2500)
@@ -51,6 +56,16 @@ public class Configuration : IPluginConfiguration
             }
 
             Version = 1;
+            Save();
+        }
+
+        // Version 1 had one catch-all retainer for everyone
+        if (Version < 2)
+        {
+            if (CatchAllRetainerId != 0)
+                GetRule(CatchAllRetainerId).CatchAll = true;
+            CatchAllRetainerId = 0;
+            Version = 2;
             Save();
         }
     }
@@ -80,4 +95,7 @@ public class RetainerRule
     public HashSet<ItemGroup> Groups { get; set; } = new();
     public HashSet<uint> UiCategories { get; set; } = new();
     public HashSet<uint> ItemIds { get; set; } = new();
+
+    // Gets anything from its character without a more specific rule
+    public bool CatchAll { get; set; }
 }

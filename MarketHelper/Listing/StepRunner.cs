@@ -48,6 +48,17 @@ public sealed class StepRunner : IDisposable
         return StepResult.Done;
     }, input);
 
+    // Queues steps to run right after the current one, in the order given
+    public void AddNext(IEnumerable<(string Name, Func<StepResult> Run)> next)
+    {
+        var after = steps.First;
+        foreach (var (name, run) in next)
+        {
+            var item = (name, run, true);
+            after = after == null ? steps.AddFirst(item) : steps.AddAfter(after, item);
+        }
+    }
+
     // Removes queued steps after the current one until one matches
     public void SkipUntilNext(Func<string, bool> isNext)
     {

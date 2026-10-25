@@ -67,6 +67,13 @@ public class RetainersTab
 
         DrawOpenRetainer();
 
+        var combine = plugin.Configuration.CombineCharacters;
+        if (ImGui.Checkbox("Combine characters (moves between characters need trades)", ref combine))
+        {
+            plugin.Configuration.CombineCharacters = combine;
+            Save();
+        }
+
         using (var tabs = ImRaii.TabBar("RetainerSubTabs"))
         {
             if (!tabs.Success)
@@ -86,7 +93,7 @@ public class RetainersTab
         }
     }
 
-    // Opens every retainer's inventory in turn so nobody has to click through them
+    // Visits every retainer at the bell, to record them or to carry out this character's moves
     private void DrawTour()
     {
         var tour = plugin.RetainerTour;
@@ -102,13 +109,20 @@ public class RetainersTab
         if (RetainerTour.CanStart)
         {
             if (ImGui.Button("Check all retainers"))
-                tour.Start();
+                tour.CheckAll();
             ImGui.SameLine();
-            ImGui.TextDisabled("Opens each retainer's inventory in turn to record it.");
+            if (ImGui.Button("Sort this character's retainers"))
+                tour.SortAll();
+            ImGui.SameLine();
+            ImGui.TextDisabled("(?)");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Check opens each retainer's inventory to record it.\n" +
+                                 "Sort takes out everything that belongs elsewhere, then puts it into the right retainers,\n" +
+                                 "for this character only. Moves to other characters still need trades.");
         }
         else
         {
-            ImGui.TextDisabled("At a summoning bell, a button here checks every retainer for you.");
+            ImGui.TextDisabled("Open the retainer list at a summoning bell to check or sort retainers automatically.");
         }
 
         if (tour.Status.Length > 0)
@@ -167,7 +181,7 @@ public class RetainersTab
                         continue;
 
                     var stacks = plan.StacksAfter.GetValueOrDefault(retainer.Id, retainer.Location.Items.Count);
-                    var catchAll = config.CatchAllRetainerId == retainer.Id ? " *" : "";
+                    var catchAll = config.RetainerRules.Find(r => r.RetainerId == retainer.Id)?.CatchAll == true ? " *" : "";
                     var unscanned = retainer.Scanned ? "" : " (not opened yet)";
                     if (ImGui.Selectable($"{retainer.Label}{catchAll}{unscanned}##{retainer.Id}", selected == retainer.Id))
                         selected = retainer.Id;
@@ -190,7 +204,7 @@ public class RetainersTab
         var current = retainers.Find(r => r.Id == selected);
         if (current == null)
         {
-            ImGui.TextWrapped("Pick a retainer to choose what it stores. * marks the catch-all retainer that gets anything without a rule.");
+            ImGui.TextWrapped("Pick a retainer to choose what it stores. Each character has its own rules; * marks a character's catch-all retainer that gets anything without a rule.");
             return;
         }
 
@@ -200,14 +214,17 @@ public class RetainersTab
         if (after > Organizer.RetainerSlots)
             Colored(Warning, "These rules send more here than fits.");
 
-        var isCatchAll = config.CatchAllRetainerId == current.Id;
-        if (ImGui.Checkbox("Catch-all: store anything without a rule here", ref isCatchAll))
+        var rule = config.GetRule(current.Id);
+
+        var isCatchAll = rule.CatchAll;
+        if (ImGui.Checkbox($"Catch-all: store anything of {current.Owner.Name}'s without a rule here", ref isCatchAll))
         {
-            config.CatchAllRetainerId = isCatchAll ? current.Id : 0;
+            // One catch-all per character
+            foreach (var other in RulesOfOwner(current))
+                other.CatchAll = false;
+            rule.CatchAll = isCatchAll;
             Save();
         }
-
-        var rule = config.GetRule(current.Id);
 
         if (ImGui.CollapsingHeader($"Groups stored here ({rule.Groups.Count})###rulegroups"))
             DrawRuleGroups(config, current, rule);
@@ -224,15 +241,15 @@ public class RetainersTab
         ImGui.TextDisabled("Tick as many as you like.");
         foreach (var group in ItemGroups.All)
         {
-            var owner = config.RetainerRules.Find(r => r.Groups.Contains(group));
+            var owner = RulesOfOwner(current).FirstOrDefault(r => r.Groups.Contains(group));
             var here = owner?.RetainerId == current.Id;
             var elsewhere = owner != null && !here
                 ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
                 : "";
             if (ImGui.Checkbox($"{ItemGroups.Label(group)}{elsewhere}##group{group}", ref here))
             {
-                // A group lives in one retainer only
-                foreach (var other in config.RetainerRules)
+                // A group lives in one retainer per character
+                foreach (var other in RulesOfOwner(current))
                     other.Groups.Remove(group);
                 if (here)
                     rule.Groups.Add(group);
@@ -271,15 +288,15 @@ public class RetainersTab
                     if (categorySearch.Length > 0 && !name.Contains(categorySearch, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    var owner = config.RetainerRules.Find(r => r.UiCategories.Contains(id));
+                    var owner = RulesOfOwner(current).FirstOrDefault(r => r.UiCategories.Contains(id));
                     var group = ItemGroups.GroupOfCategory(id, name);
                     var suffix = owner != null && owner.RetainerId != current.Id
                         ? $" (now {retainers.Find(r => r.Id == owner.RetainerId)?.Name ?? "another retainer"})"
                         : group != ItemGroup.None ? $" (in {ItemGroups.Label(group)})" : "";
                     if (ImGui.Selectable($"{name}{suffix}##addcat{id}", rule.UiCategories.Contains(id)))
                     {
-                        // A category lives in one retainer only
-                        foreach (var other in config.RetainerRules)
+                        // A category lives in one retainer per character
+                        foreach (var other in RulesOfOwner(current))
                             other.UiCategories.Remove(id);
                         rule.UiCategories.Add(id);
                         Save();
@@ -370,11 +387,14 @@ public class RetainersTab
             return;
 
         ImGui.TextDisabled("Always store this item in:");
-        foreach (var retainer in retainers)
+        var choices = plugin.Configuration.CombineCharacters
+            ? retainers
+            : retainers.Where(r => r.Owner.ContentId == move.From.Owner.ContentId);
+        foreach (var retainer in choices)
         {
             if (ImGui.Selectable($"{retainer.Label}##storein{retainer.Id}"))
             {
-                foreach (var rule in plugin.Configuration.RetainerRules)
+                foreach (var rule in RulesOfOwner(retainer))
                     rule.ItemIds.Remove(move.Item.Id);
                 plugin.Configuration.GetRule(retainer.Id).ItemIds.Add(move.Item.Id);
                 Save();
@@ -389,12 +409,19 @@ public class RetainersTab
 
         if (!move.From.IsBags && ImGui.Selectable("Leave it wherever it is"))
         {
-            foreach (var rule in plugin.Configuration.RetainerRules)
+            foreach (var rule in RulesOfOwner(move.From))
                 rule.ItemIds.Remove(move.Item.Id);
             plugin.Configuration.CarryItemIds.Remove(move.Item.Id);
             plugin.Configuration.GetRule(move.From.Id).ItemIds.Add(move.Item.Id);
             Save();
         }
+    }
+
+    // Rules of every retainer that belongs to the same character as this one
+    private IEnumerable<RetainerRule> RulesOfOwner(RetainerRef retainer)
+    {
+        var ids = retainers.Where(r => r.Owner.ContentId == retainer.Owner.ContentId).Select(r => r.Id).ToHashSet();
+        return plugin.Configuration.RetainerRules.Where(r => ids.Contains(r.RetainerId)).ToList();
     }
 
     private void Save()

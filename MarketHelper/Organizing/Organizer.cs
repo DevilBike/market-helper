@@ -48,31 +48,36 @@ public class Organizer
         config.CarryItemIds.Contains(item.Id) ||
         (item.Group != ItemGroup.None && config.CarryGroups.Contains(item.Group));
 
-    // Most specific wins: single item, then category, then broad group, then the catch-all
-    public static ulong TargetFor(ItemInfo item, Configuration config)
+    // Most specific wins: single item, then category, then broad group, then a catch-all.
+    // Among equally specific rules, a retainer of the item's own character wins.
+    public static ulong TargetFor(ItemInfo item, Configuration config, ICollection<ulong> allowed, ICollection<ulong> own)
     {
-        foreach (var rule in config.RetainerRules)
+        var levels = new System.Func<RetainerRule, bool>[]
         {
-            if (rule.ItemIds.Contains(item.Id))
-                return rule.RetainerId;
-        }
+            r => r.ItemIds.Contains(item.Id),
+            r => r.UiCategories.Contains(item.UiCategory),
+            r => item.Group != ItemGroup.None && r.Groups.Contains(item.Group),
+            r => r.CatchAll,
+        };
 
-        foreach (var rule in config.RetainerRules)
+        foreach (var matches in levels)
         {
-            if (rule.UiCategories.Contains(item.UiCategory))
-                return rule.RetainerId;
-        }
-
-        if (item.Group != ItemGroup.None)
-        {
+            ulong elsewhere = 0;
             foreach (var rule in config.RetainerRules)
             {
-                if (rule.Groups.Contains(item.Group))
+                if (!allowed.Contains(rule.RetainerId) || !matches(rule))
+                    continue;
+                if (own.Contains(rule.RetainerId))
                     return rule.RetainerId;
+                if (elsewhere == 0)
+                    elsewhere = rule.RetainerId;
             }
+
+            if (elsewhere != 0)
+                return elsewhere;
         }
 
-        return config.CatchAllRetainerId;
+        return 0;
     }
 
     public MovePlan Plan(IEnumerable<CharacterRecord> characters, Configuration config)
@@ -81,6 +86,14 @@ public class Organizer
         var retainers = Retainers(characterList);
         var byId = retainers.ToDictionary(r => r.Id);
         var moves = new List<Move>();
+
+        var allIds = byId.Keys.ToHashSet();
+        var idsByOwner = retainers.GroupBy(r => r.Owner.ContentId).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToHashSet());
+        ulong Target(ItemInfo item, CharacterRecord owner)
+        {
+            var own = idsByOwner.GetValueOrDefault(owner.ContentId) ?? new HashSet<ulong>();
+            return TargetFor(item, config, config.CombineCharacters ? allIds : own, own);
+        }
 
         // Items on the keep-on-me list come back to their owner's bags
         RetainerRef BagsOf(CharacterRecord owner) => new(owner,
@@ -98,7 +111,7 @@ public class Organizer
                     continue;
                 }
 
-                var target = TargetFor(item, config);
+                var target = Target(item, from.Owner);
                 if (target == 0 || target == from.Id || !byId.TryGetValue(target, out var to))
                     continue;
 
@@ -125,7 +138,7 @@ public class Organizer
                     if (IsCarried(item, config))
                         continue;
 
-                    var target = TargetFor(item, config);
+                    var target = Target(item, owner);
                     if (target == 0 || !byId.TryGetValue(target, out var to))
                         continue;
                     if (from.Owner.ContentId != to.Owner.ContentId && item.Untradable)
