@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using MarketHelper.Inventory;
@@ -251,22 +252,26 @@ public class Organizer
         }
     }
 
-    // Rough stack count per retainer after the moves, to warn about full retainers
+    // Stack count per retainer after the moves: what stays, plus every stack that arrives.
+    // A move carries all stacks of an item from one place (12 stacks of 999 count as 12).
+    // Arriving stacks only merge into a partial stack when they fit completely, so this
+    // is an upper bound.
     private static Dictionary<ulong, int> CountStacks(List<RetainerRef> retainers, List<Move> moves)
     {
         var stacksAfter = retainers.ToDictionary(r => r.Id, r => r.Location.Items.Count);
-        var arrived = new HashSet<(ulong, uint, bool)>();
         foreach (var move in moves)
         {
-            if (move.From.IsRetainer)
-                stacksAfter[move.From.Id] -= move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
-
-            if (move.To.IsRetainer && !AlreadyThere(move) && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
-                stacksAfter[move.To.Id] += 1;
+            if (move.From.IsRetainer && stacksAfter.ContainsKey(move.From.Id))
+                stacksAfter[move.From.Id] -= StacksOf(move);
+            if (move.To.IsRetainer && stacksAfter.ContainsKey(move.To.Id))
+                stacksAfter[move.To.Id] += StacksOf(move);
         }
 
         return stacksAfter;
     }
+
+    public static int StacksOf(Move move) =>
+        Math.Max(1, move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq));
 
     private static bool AlreadyThere(Move move) =>
         move.To.Location.Items.Any(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
@@ -294,7 +299,7 @@ public class Organizer
                     continue;
 
                 moves[i] = move with { To = overflow };
-                excess--;
+                excess -= StacksOf(move);
             }
         }
     }
