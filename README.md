@@ -21,7 +21,7 @@ Retainers are listed in their in-game order (retainers that aren't paid for are 
 With the retainer list open at a summoning bell:
 
 - **Check all retainers** opens each retainer's inventory in turn and records it.
-- **Sort this character's retainers** first shows what it will do, then on **Go** takes everything that belongs elsewhere out of each retainer into your bags, visits each destination and puts it in, topping up partial stacks before using empty slots. When your bags fill up it stops taking things out, puts away what it has, and goes round again until the job is done. With **Store crystals too**, your shards, crystals and clusters go into the first retainer in the list, then the next as each fills (a kind only goes in when all of it fits). Moves to another character still need a trade.
+- **Sort this character's retainers** first shows what it will do, then on **Go** goes down the retainer list visiting each retainer once: it puts away what's in your bags for that retainer, then takes out what belongs further down the list until your bags reach the **Bag limit** (default 120 of 140 slots). If a retainer is full, it swaps out stacks that belong elsewhere to make room. Rounds alternate up and down the list until nothing is left to move, topping up partial stacks before using empty slots. With **Store crystals too**, your shards, crystals and clusters go into the first retainer in the list, then the next as each fills (a kind only goes in when all of it fits). Moves to another character still need a trade.
 
 Both click through the retainer greetings and use the same random delays as listing; the status line shows the current step.
 
