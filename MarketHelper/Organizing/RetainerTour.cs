@@ -812,7 +812,16 @@ public sealed unsafe class RetainerTour : IDisposable
             return true;
 
         var moving = slot with { Quantity = (int)now.Quantity };
-        var name = plugin.Valuator.GetItem(slot.ItemId).Name;
+        var info = plugin.Valuator.GetItem(slot.ItemId);
+        var name = info.Name;
+
+        // A container holds only one of a unique item; it waits for the next retainer instead
+        if (info.Unique && Read(containers).Any(s => s.ItemId == slot.ItemId))
+        {
+            Log.Add($"{name} is unique and the {PlaceName(containers[0])} already has one");
+            return true;
+        }
+
         if (SlotFor(containers, moving) is not { } target)
         {
             if (toBags)
