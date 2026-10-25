@@ -488,7 +488,7 @@ public class RetainersTab
                 continue;
 
             if (!rule.UiCategories.Contains(item.UiCategory) && item.Group != ItemGroup.None && rule.Groups.Contains(item.Group))
-                options[(item.Group, 0)] = options.GetValueOrDefault((item.Group, 0)) + 1;
+                options[(item.Group, 0u)] = options.GetValueOrDefault((item.Group, 0u)) + 1;
             if (item.UiCategory != 0)
                 options[(ItemGroup.None, item.UiCategory)] = options.GetValueOrDefault((ItemGroup.None, item.UiCategory)) + 1;
         }
