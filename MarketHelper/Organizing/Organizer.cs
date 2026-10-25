@@ -41,7 +41,7 @@ public class Organizer
             .SelectMany(c => c.Locations.Values
                 .Where(l => l.Kind == LocationKind.Retainer)
                 .Select(l => new RetainerRef(c, l)))
-            .OrderBy(r => r.Owner.Name).ThenBy(r => r.Name)
+            .OrderBy(r => r.Owner.Name).ThenBy(r => r.Location.Order).ThenBy(r => r.Name)
             .ToList();
 
     public static bool IsCarried(ItemInfo item, Configuration config) =>
@@ -87,8 +87,11 @@ public class Organizer
         var byId = retainers.ToDictionary(r => r.Id);
         var moves = new List<Move>();
 
-        var allIds = byId.Keys.ToHashSet();
-        var idsByOwner = retainers.GroupBy(r => r.Owner.ContentId).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToHashSet());
+        // Ignored retainers are neither emptied nor filled
+        var ignored = config.RetainerRules.Where(r => r.Ignored).Select(r => r.RetainerId).ToHashSet();
+        var active = retainers.Where(r => !ignored.Contains(r.Id)).ToList();
+        var allIds = active.Select(r => r.Id).ToHashSet();
+        var idsByOwner = active.GroupBy(r => r.Owner.ContentId).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToHashSet());
         ulong Target(ItemInfo item, CharacterRecord owner)
         {
             var own = idsByOwner.GetValueOrDefault(owner.ContentId) ?? new HashSet<ulong>();
@@ -100,7 +103,7 @@ public class Organizer
             owner.Locations.GetValueOrDefault(CharacterRecord.LocationKey(LocationKind.Bags))
             ?? new Location { Kind = LocationKind.Bags });
 
-        foreach (var from in retainers)
+        foreach (var from in active)
         {
             foreach (var group in from.Location.Items.GroupBy(s => (s.ItemId, s.IsHq)))
             {
@@ -149,7 +152,13 @@ public class Organizer
             }
         }
 
-        // Rough stack count per retainer after the moves, to warn about full retainers
+        ApplyOverflow(retainers, byId, moves, config);
+        return new MovePlan(moves, CountStacks(retainers, moves));
+    }
+
+    // Rough stack count per retainer after the moves, to warn about full retainers
+    private static Dictionary<ulong, int> CountStacks(List<RetainerRef> retainers, List<Move> moves)
+    {
         var stacksAfter = retainers.ToDictionary(r => r.Id, r => r.Location.Items.Count);
         var arrived = new HashSet<(ulong, uint, bool)>();
         foreach (var move in moves)
@@ -157,11 +166,41 @@ public class Organizer
             if (!move.From.IsBags)
                 stacksAfter[move.From.Id] -= move.From.Location.Items.Count(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
 
-            var alreadyThere = move.To.Location.Items.Any(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
-            if (!move.To.IsBags && !alreadyThere && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
+            if (!move.To.IsBags && !AlreadyThere(move) && arrived.Add((move.To.Id, move.Item.Id, move.IsHq)))
                 stacksAfter[move.To.Id] += 1;
         }
 
-        return new MovePlan(moves, stacksAfter);
+        return stacksAfter;
+    }
+
+    private static bool AlreadyThere(Move move) =>
+        move.To.Location.Items.Any(s => s.ItemId == move.Item.Id && s.IsHq == move.IsHq);
+
+    // A full retainer with an overflow retainer leaves what's already in the overflow there,
+    // then sends new stacks to the overflow until it fits
+    private static void ApplyOverflow(List<RetainerRef> retainers, Dictionary<ulong, RetainerRef> byId, List<Move> moves, Configuration config)
+    {
+        foreach (var rule in config.RetainerRules.Where(r => r.OverflowRetainerId != 0 && !r.Ignored))
+        {
+            if (!byId.TryGetValue(rule.RetainerId, out var full) || !byId.TryGetValue(rule.OverflowRetainerId, out var overflow))
+                continue;
+            if (CountStacks(retainers, moves).GetValueOrDefault(full.Id) <= RetainerSlots)
+                continue;
+
+            moves.RemoveAll(m => m.To.Id == full.Id && !m.To.IsBags && !m.From.IsBags && m.From.Id == overflow.Id);
+
+            var excess = CountStacks(retainers, moves)[full.Id] - RetainerSlots;
+            for (var i = moves.Count - 1; i >= 0 && excess > 0; i--)
+            {
+                var move = moves[i];
+                if (move.To.IsBags || move.To.Id != full.Id || AlreadyThere(move))
+                    continue;
+                if (move.From.Owner.ContentId != overflow.Owner.ContentId && move.Item.Untradable)
+                    continue;
+
+                moves[i] = move with { To = overflow };
+                excess--;
+            }
+        }
     }
 }

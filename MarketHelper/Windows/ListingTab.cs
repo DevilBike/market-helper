@@ -7,6 +7,7 @@ using Dalamud.Interface.Utility.Raii;
 using MarketHelper.Inventory;
 using MarketHelper.Listing;
 using MarketHelper.Market;
+using MarketHelper.Organizing;
 
 namespace MarketHelper.Windows;
 
@@ -17,6 +18,7 @@ public class ListingTab
     private readonly Plugin plugin;
 
     private List<(BagSlot Slot, ValuationRow Row)> candidates = new();
+    private List<(BagSlot Slot, ValuationRow Row)> vendorCandidates = new();
     private readonly HashSet<(Dalamud.Game.Inventory.GameInventoryType, int)> deselected = new();
     private DateTime nextBagRefresh = DateTime.MinValue;
     private bool showAllTradable;
@@ -64,6 +66,7 @@ public class ListingTab
 
         ImGui.Spacing();
         DrawCandidates(Lister.MaxListings - listed);
+        DrawVendor();
         DrawLog();
     }
 
@@ -148,11 +151,38 @@ public class ListingTab
 
         var character = plugin.Store.GetOrAdd(Plugin.PlayerState.ContentId);
         var bags = new Location { Kind = LocationKind.Bags };
-        candidates = Lister.ReadBags()
+        var evaluated = Lister.ReadBags()
             .Select(slot => (slot, row: plugin.Valuator.EvaluateStack(character, bags, plugin.Valuator.GetItem(slot.ItemId), slot.IsHq, slot.Quantity, plugin.Configuration)))
+            .ToList();
+        candidates = evaluated
             .Where(c => c.row.Item.MarketSellable && !c.row.Item.Untradable)
             .OrderByDescending(c => c.row.StackValue)
             .ToList();
+        vendorCandidates = evaluated
+            .Where(c => c.row.Verdict == Verdict.Vendor && !Organizer.IsCarried(c.row.Item, plugin.Configuration))
+            .OrderBy(c => c.row.Item.Name)
+            .ToList();
+    }
+
+    // Items marked Vendor go to the vendor through the retainer, one click for all of them
+    private void DrawVendor()
+    {
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Sell to the vendor");
+        ImGui.Separator();
+        if (vendorCandidates.Count == 0)
+        {
+            ImGui.TextDisabled("Nothing in your bags is marked Vendor.");
+            return;
+        }
+
+        var gil = vendorCandidates.Sum(c => (long)c.Row.VendorValue);
+        if (ImGui.Button($"Have the retainer sell {vendorCandidates.Count} Vendor items (about {gil:N0} gil)"))
+            plugin.Lister.VendorItems(vendorCandidates.Select(c => c.Slot).ToList());
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(string.Join("\n", vendorCandidates.Take(30).Select(c => $"{c.Row.Item.Name} x{c.Slot.Quantity}")) +
+                             (vendorCandidates.Count > 30 ? $"\n...and {vendorCandidates.Count - 30} more" : ""));
     }
 
     private void DrawLog()

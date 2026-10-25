@@ -27,7 +27,14 @@ public class Location
     public ulong RetainerId { get; set; }
     public string RetainerName { get; set; } = string.Empty;
 
+    // Position in the game's retainer list, for showing retainers in the same order
+    public int Order { get; set; } = 99;
+
+    // When the items last changed, and when they were last looked at
     public DateTime UpdatedUtc { get; set; }
+    public DateTime CheckedUtc { get; set; }
+
+    public DateTime LastSeenUtc => CheckedUtc > UpdatedUtc ? CheckedUtc : UpdatedUtc;
     public List<ItemStack> Items { get; set; } = new();
 }
 

@@ -39,6 +39,8 @@ public sealed unsafe class Lister : IDisposable
     private readonly StepRunner runner;
     private readonly OfferingsWatcher offerings = new();
     private readonly string putUpForSaleText;
+    private readonly string retainerSellText;
+    private DateTime confirmDeadline;
 
     // State of the item currently in the sell window
     private uint itemId;
@@ -64,6 +66,11 @@ public sealed unsafe class Lister : IDisposable
         putUpForSaleText = Plugin.DataManager.GetExcelSheet<AddonSheet>().TryGetRow(99, out var row)
             ? row.Text.ToString()
             : "Put Up for Sale";
+
+        // Row 5480 is "Have Retainer Sell Items", which sells to the vendor through the retainer
+        retainerSellText = Plugin.DataManager.GetExcelSheet<AddonSheet>().TryGetRow(5480, out var sellRow)
+            ? sellRow.Text.ToString()
+            : "Have Retainer Sell Items";
     }
 
     public void Dispose()
@@ -145,6 +152,66 @@ public sealed unsafe class Lister : IDisposable
         }
 
         runner.Add("Finish", () => AddLog($"Done. Handled {Finished} of {Total} items."), input: false);
+    }
+
+    // Sells bag items to the vendor through the open retainer
+    public void VendorItems(IReadOnlyList<BagSlot> slots)
+    {
+        if (IsRunning || !SellListOpen)
+            return;
+
+        StartBatch(slots.Count);
+        foreach (var slot in slots)
+        {
+            var name = plugin.Valuator.GetItem(slot.ItemId).Name;
+            runner.Add($"Open {name}", () => OpenBagItemMenu(slot));
+            runner.Add("Choose Have Retainer Sell Items", ChooseRetainerSell);
+            runner.Add("Confirm if asked", ConfirmIfAsked, input: false);
+            runner.Add("Wait for the sale", () =>
+            {
+                var now = Plugin.GameInventory.GetInventoryItems(slot.Container)[slot.Slot];
+                if (!now.IsEmpty && now.BaseItemId == slot.ItemId)
+                    return StepResult.Wait;
+                AddLog($"{name}: sold to the vendor.");
+                Finished++;
+                return StepResult.Done;
+            }, input: false);
+        }
+
+        runner.Add("Finish", () => AddLog($"Done. Sold {Finished} of {Total} items to the vendor."), input: false);
+    }
+
+    private StepResult ChooseRetainerSell()
+    {
+        var menu = GameUi.GetReady(ContextMenuAddon);
+        if (menu == null)
+            return StepResult.Wait;
+
+        var index = GameUi.FindContextEntry(menu, retainerSellText);
+        if (index < 0)
+        {
+            AddLog("The item menu had no \"Have Retainer Sell Items\" entry.");
+            menu->Close(true);
+            SkipCurrentItem();
+            return StepResult.Done;
+        }
+
+        confirmDeadline = DateTime.UtcNow.AddMilliseconds(1500);
+        GameUi.SelectContextEntry(menu, index);
+        return StepResult.Done;
+    }
+
+    // Some items ask "Are you certain?" first; answer yes, since you picked them
+    private StepResult ConfirmIfAsked()
+    {
+        var yesno = GameUi.GetReady("SelectYesno");
+        if (yesno != null)
+        {
+            GameUi.Fire(yesno, true, 0);
+            return StepResult.Done;
+        }
+
+        return DateTime.UtcNow < confirmDeadline ? StepResult.Wait : StepResult.Done;
     }
 
     private void StartBatch(int total)
