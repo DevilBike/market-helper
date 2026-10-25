@@ -114,4 +114,19 @@ public static unsafe class GameUi
         values[3].Type = 0;
         list->FireCallback(4, values, true);
     }
+
+    // RetainerList: each row is 10 values from value 3; value 8 of a row is false when it's greyed out.
+    // Only trusted when the row is also past the number of retainers the account pays for.
+    public static bool IsRetainerRowLocked(AtkUnitBase* list, int row, int entitlement)
+    {
+        var index = 3 + 10 * row + 8;
+        if (index >= list->AtkValuesCount)
+            return false;
+
+        var value = list->AtkValues[index];
+        if (value.Type != AtkValueType.Bool || value.Byte != 0)
+            return false;
+
+        return entitlement <= 0 || row >= entitlement;
+    }
 }

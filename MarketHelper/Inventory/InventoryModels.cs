@@ -30,6 +30,9 @@ public class Location
     // Position in the game's retainer list, for showing retainers in the same order
     public int Order { get; set; } = 99;
 
+    // The retainer list shows it greyed out because it isn't paid for
+    public bool Locked { get; set; }
+
     // When the items last changed, and when they were last looked at
     public DateTime UpdatedUtc { get; set; }
     public DateTime CheckedUtc { get; set; }

@@ -25,7 +25,7 @@ public class RetainersTab
     private MovePlan plan = new(new List<Move>(), new Dictionary<ulong, int>());
     private DateTime nextRefresh = DateTime.MinValue;
 
-    private static readonly string[] MoveFilters = ["All moves", "Between retainers", "From my bags", "Back to my bags", "Trades only"];
+    private static readonly string[] MoveFilters = ["All moves", "Between retainers", "From my bags or saddlebag", "To my bags or saddlebag", "Trades only"];
 
     private ulong selected;
     private string categorySearch = string.Empty;
@@ -90,7 +90,7 @@ public class RetainersTab
 
         // In game order, with ignored retainers at the bottom
         var shown = retainers.Where(r => r.Owner.ContentId == owner)
-            .OrderBy(r => IsIgnored(r.Id)).ThenBy(r => r.Location.Order).ThenBy(r => r.Name)
+            .OrderBy(r => IsIgnored(r.Id) || r.Location.Locked).ThenBy(r => r.Location.Order).ThenBy(r => r.Name)
             .ToList();
         var moves = plan.Moves.Where(m => m.From.Owner.ContentId == owner || m.To.Owner.ContentId == owner).ToList();
 
@@ -207,8 +207,8 @@ public class RetainersTab
         if (open == 0)
             return;
 
-        var takeOut = plan.Moves.Where(m => !m.From.IsBags && m.From.Id == open).ToList();
-        var putIn = plan.Moves.Where(m => !m.To.IsBags && m.To.Id == open && !m.NeedsTrade).ToList();
+        var takeOut = plan.Moves.Where(m => m.From.IsRetainer && m.From.Id == open).ToList();
+        var putIn = plan.Moves.Where(m => m.To.IsRetainer && m.To.Id == open && !m.NeedsTrade).ToList();
         if (takeOut.Count == 0 && putIn.Count == 0)
         {
             Colored(Highlight, "This retainer is already organized.");
@@ -230,7 +230,7 @@ public class RetainersTab
         {
             Colored(Highlight, "Put in:");
             foreach (var move in putIn)
-                ImGui.BulletText($"{ItemLabel(move)} from {move.From.Name}{(move.From.IsBags ? "" : " (withdraw it there first)")}");
+                ImGui.BulletText($"{ItemLabel(move)} from {move.From.Name}{(move.From.IsRetainer ? " (withdraw it there first)" : "")}");
         }
 
         ImGui.Separator();
@@ -348,8 +348,9 @@ public class RetainersTab
 
                     var stacks = plan.StacksAfter.GetValueOrDefault(retainer.Id, retainer.Location.Items.Count);
                     var catchAll = config.RetainerRules.Find(r => r.RetainerId == retainer.Id)?.CatchAll == true ? " *" : "";
-                    var seen = retainer.Scanned ? $" ({Age(retainer.Location.LastSeenUtc)})" : " (not opened yet)";
-                    using (ImRaii.PushColor(ImGuiCol.Text, ImGui.GetColorU32(ImGuiCol.TextDisabled), IsIgnored(retainer.Id)))
+                    var seen = retainer.Location.Locked ? " (locked: not paid for)"
+                        : retainer.Scanned ? $" ({Age(retainer.Location.LastSeenUtc)})" : " (not opened yet)";
+                    using (ImRaii.PushColor(ImGuiCol.Text, ImGui.GetColorU32(ImGuiCol.TextDisabled), IsIgnored(retainer.Id) || retainer.Location.Locked))
                     {
                         if (ImGui.Selectable($"{retainer.Name}{catchAll}{seen}##{retainer.Id}", selected == retainer.Id))
                             selected = retainer.Id;
@@ -718,9 +719,9 @@ public class RetainersTab
 
         moves = moves.Where(m => moveFilter switch
             {
-                1 => !m.From.IsBags && !m.To.IsBags,
-                2 => m.From.IsBags,
-                3 => m.To.IsBags,
+                1 => m.From.IsRetainer && m.To.IsRetainer,
+                2 => !m.From.IsRetainer,
+                3 => !m.To.IsRetainer,
                 4 => m.NeedsTrade,
                 _ => true,
             })
@@ -778,7 +779,7 @@ public class RetainersTab
             Save();
         }
 
-        if (!move.From.IsBags && ImGui.Selectable("Leave it wherever it is"))
+        if (move.From.IsRetainer && ImGui.Selectable("Leave it wherever it is"))
         {
             foreach (var rule in RulesOfOwner(move.From))
                 rule.ItemIds.Remove(move.Item.Id);
