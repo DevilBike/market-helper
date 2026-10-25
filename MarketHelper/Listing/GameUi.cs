@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Dalamud.Memory;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -67,19 +69,25 @@ public static unsafe class GameUi
 
     public static void SelectContextEntry(AtkUnitBase* menu, int index) => Fire(menu, true, 0, index, 0);
 
-    // SelectString lists choices like "Entrust or withdraw items."; matched by how the text starts
-    public static int FindSelectStringEntry(AtkUnitBase* addon, string text)
+    public static List<string> SelectStringEntries(AtkUnitBase* addon)
     {
         var select = (AddonSelectString*)addon;
+        var entries = new List<string>();
         for (var i = 0; i < select->PopupMenu.PopupMenu.EntryCount; i++)
-        {
-            var entry = MemoryHelper.ReadSeStringNullTerminated((nint)select->PopupMenu.PopupMenu.EntryNames[i].Value).TextValue;
-            if (entry.StartsWith(text, System.StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-
-        return -1;
+            entries.Add(MemoryHelper.ReadSeStringNullTerminated((nint)select->PopupMenu.PopupMenu.EntryNames[i].Value).TextValue);
+        return entries;
     }
+
+    // SelectString lists choices like "Entrust or withdraw items."; matched on letters and digits only
+    public static int FindSelectStringEntry(AtkUnitBase* addon, string text)
+    {
+        var wanted = Simplify(text);
+        var entries = SelectStringEntries(addon);
+        return wanted.Length == 0 ? -1 : entries.FindIndex(e => Simplify(e).StartsWith(wanted));
+    }
+
+    private static string Simplify(string text) =>
+        new string(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     // Advances a speech bubble, like clicking on it
     public static void ClickTalk(AtkUnitBase* addon)

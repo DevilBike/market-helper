@@ -33,6 +33,11 @@ public class RetainersTab
     private string moveSearch = string.Empty;
     private int moveFilter;
 
+    // Whose retainers the tab shows; 0 means whoever is logged in
+    private ulong viewOwner;
+    private string spreadSearch = string.Empty;
+    private int spreadMax = 99;
+
     public RetainersTab(Plugin plugin)
     {
         this.plugin = plugin;
@@ -67,12 +72,9 @@ public class RetainersTab
 
         DrawOpenRetainer();
 
-        var combine = plugin.Configuration.CombineCharacters;
-        if (ImGui.Checkbox("Combine characters (moves between characters need trades)", ref combine))
-        {
-            plugin.Configuration.CombineCharacters = combine;
-            Save();
-        }
+        var owner = DrawCharacterPicker();
+        var shown = retainers.Where(r => r.Owner.ContentId == owner).ToList();
+        var moves = plan.Moves.Where(m => m.From.Owner.ContentId == owner || m.To.Owner.ContentId == owner).ToList();
 
         using (var tabs = ImRaii.TabBar("RetainerSubTabs"))
         {
@@ -82,13 +84,19 @@ public class RetainersTab
             using (var tab = ImRaii.TabItem("Rules"))
             {
                 if (tab.Success)
-                    DrawRules();
+                    DrawRules(shown);
             }
 
-            using (var tab = ImRaii.TabItem($"Moves ({plan.Moves.Count})###Moves"))
+            using (var tab = ImRaii.TabItem($"Moves ({moves.Count})###Moves"))
             {
                 if (tab.Success)
-                    DrawMoves(plan.Moves);
+                    DrawMoves(moves);
+            }
+
+            using (var tab = ImRaii.TabItem("Across characters"))
+            {
+                if (tab.Success)
+                    DrawSpread();
             }
         }
     }
@@ -165,7 +173,102 @@ public class RetainersTab
         ImGui.Separator();
     }
 
-    private void DrawRules()
+    // Picks which character's retainers to show; defaults to the one logged in
+    private ulong DrawCharacterPicker()
+    {
+        var owners = retainers.Select(r => r.Owner).DistinctBy(o => o.ContentId).OrderBy(o => o.Name).ToList();
+        var current = Plugin.PlayerState.ContentId;
+        if (viewOwner == 0 || owners.All(o => o.ContentId != viewOwner))
+            viewOwner = owners.Any(o => o.ContentId == current) ? current : owners[0].ContentId;
+
+        var label = owners.Find(o => o.ContentId == viewOwner)?.Name ?? "?";
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        using (var combo = ImRaii.Combo("Character##viewowner", label))
+        {
+            if (combo.Success)
+            {
+                foreach (var o in owners)
+                {
+                    var you = o.ContentId == current ? " (you)" : "";
+                    if (ImGui.Selectable($"{o.Name}{you}##owner{o.ContentId}", o.ContentId == viewOwner))
+                        viewOwner = o.ContentId;
+                }
+            }
+        }
+
+        ImGui.SameLine();
+        var combine = plugin.Configuration.CombineCharacters;
+        if (ImGui.Checkbox("Combine characters", ref combine))
+        {
+            plugin.Configuration.CombineCharacters = combine;
+            Save();
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Off: each character's items stay with that character's retainers.\nOn: rules can send items to other characters' retainers (those need trades).");
+
+        return viewOwner;
+    }
+
+    // Items kept on several characters in small amounts, which could live on one
+    private void DrawSpread()
+    {
+        ImGui.TextWrapped("Tradable items that more than one character holds, counting bags, saddlebags and retainers. Trade them to the character that has the most to bring them together.");
+
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("##spreadsearch", "Search", ref spreadSearch, 100);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120 * ImGuiHelpers.GlobalScale);
+        if (ImGui.InputInt("Only if each has at most", ref spreadMax, 10, 100))
+            spreadMax = Math.Max(1, spreadMax);
+
+        var kinds = new[] { LocationKind.Bags, LocationKind.Saddlebag, LocationKind.Retainer };
+        var holdings = plugin.Store.Characters.Values
+            .SelectMany(c => c.Locations.Values
+                .Where(l => kinds.Contains(l.Kind))
+                .SelectMany(l => l.Items)
+                .Select(i => (Character: c, i.ItemId, i.Quantity)))
+            .GroupBy(h => h.ItemId)
+            .Select(g => (
+                Item: plugin.Valuator.GetItem(g.Key),
+                PerCharacter: g.GroupBy(h => h.Character.ContentId)
+                    .Select(c => (Name: c.First().Character.Name, Quantity: c.Sum(h => h.Quantity)))
+                    .OrderByDescending(c => c.Quantity)
+                    .ToList()))
+            .Where(r => r.PerCharacter.Count > 1 && !r.Item.Untradable)
+            .Where(r => r.PerCharacter.All(c => c.Quantity <= spreadMax))
+            .Where(r => spreadSearch.Length == 0 || r.Item.Name.Contains(spreadSearch, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(r => r.PerCharacter.Count)
+            .ThenBy(r => r.Item.Name)
+            .ToList();
+
+        if (holdings.Count == 0)
+        {
+            ImGui.TextDisabled("Nothing is spread across characters.");
+            return;
+        }
+
+        using var table = ImRaii.Table("spread", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingFixedFit);
+        if (!table.Success)
+            return;
+
+        ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("Held by", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("Bring to");
+        ImGui.TableHeadersRow();
+        foreach (var (item, perCharacter) in holdings)
+        {
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(item.Name);
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(string.Join(", ", perCharacter.Select(c => $"{c.Name} {c.Quantity}")));
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(perCharacter[0].Name);
+        }
+    }
+
+    private void DrawRules(List<RetainerRef> shown)
     {
         var config = plugin.Configuration;
 
@@ -175,7 +278,7 @@ public class RetainersTab
             {
                 ImGui.SetNextItemWidth(-1);
                 ImGui.InputTextWithHint("##retainersearch", "Search", ref retainerSearch, 50);
-                foreach (var retainer in retainers)
+                foreach (var retainer in shown)
                 {
                     if (retainerSearch.Length > 0 && !retainer.Label.Contains(retainerSearch, StringComparison.OrdinalIgnoreCase))
                         continue;
@@ -201,7 +304,7 @@ public class RetainersTab
         if (!detail.Success)
             return;
 
-        var current = retainers.Find(r => r.Id == selected);
+        var current = shown.Find(r => r.Id == selected);
         if (current == null)
         {
             ImGui.TextWrapped("Pick a retainer to choose what it stores. Each character has its own rules; * marks a character's catch-all retainer that gets anything without a rule.");

@@ -66,8 +66,8 @@ public sealed unsafe class RetainerTour : IDisposable
 
         // Addon rows 2378 "Entrust or withdraw items." and 2383 "Quit.", in the client's language
         var sheet = Plugin.DataManager.GetExcelSheet<AddonSheet>();
-        entrustText = sheet.TryGetRow(2378, out var entrust) ? entrust.Text.ToString().TrimEnd('.') : "Entrust or withdraw items";
-        quitText = sheet.TryGetRow(2383, out var quit) ? quit.Text.ToString().TrimEnd('.') : "Quit";
+        entrustText = sheet.TryGetRow(2378, out var entrust) ? entrust.Text.ExtractText() : "Entrust or withdraw items";
+        quitText = sheet.TryGetRow(2383, out var quit) ? quit.Text.ExtractText() : "Quit";
     }
 
     public void Dispose() => runner.Dispose();
@@ -192,7 +192,8 @@ public sealed unsafe class RetainerTour : IDisposable
         });
 
         runner.Add("Waiting for the retainer menu", () => PastTalk(MenuAddon), false);
-        runner.Add("Choosing Entrust or withdraw items", () => Choose(entrustText));
+        // Entrust is the first choice in the retainer menu, Quit the last, if the text can't be matched
+        runner.Add("Choosing Entrust or withdraw items", () => Choose(entrustText, first: true));
 
         runner.Add("Waiting for the retainer inventory", () =>
         {
@@ -217,7 +218,7 @@ public sealed unsafe class RetainerTour : IDisposable
         });
 
         runner.Add("Waiting for the retainer menu", () => PastTalk(MenuAddon), false);
-        runner.Add("Choosing Quit", () => Choose(quitText));
+        runner.Add("Choosing Quit", () => Choose(quitText, first: false));
 
         runner.Add("Waiting for the retainer list", () =>
         {
@@ -338,7 +339,7 @@ public sealed unsafe class RetainerTour : IDisposable
         return StepResult.Wait;
     }
 
-    private static StepResult Choose(string text)
+    private static StepResult Choose(string text, bool first)
     {
         var menu = GameUi.GetReady(MenuAddon);
         if (menu == null)
@@ -346,7 +347,13 @@ public sealed unsafe class RetainerTour : IDisposable
 
         var index = GameUi.FindSelectStringEntry(menu, text);
         if (index < 0)
-            return StepResult.Fail;
+        {
+            var entries = GameUi.SelectStringEntries(menu);
+            Plugin.Log.Warning($"Retainer menu has no \"{text}\"; entries: {string.Join(" | ", entries)}");
+            if (entries.Count == 0)
+                return StepResult.Wait;
+            index = first ? 0 : entries.Count - 1;
+        }
 
         GameUi.Fire(menu, true, index);
         return StepResult.Done;
