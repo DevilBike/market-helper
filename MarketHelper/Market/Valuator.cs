@@ -28,7 +28,7 @@ public enum ItemGroup
     Fishing,
 }
 
-public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory, ItemGroup Group, uint StackSize = 1, bool Unique = false);
+public record ItemInfo(uint Id, string Name, uint VendorPrice, bool MarketSellable, bool Untradable, uint UiCategory, ItemGroup Group, uint StackSize = 1, bool Unique = false, uint ItemLevel = 0);
 
 public record ValuationRow(
     CharacterRecord Character,
@@ -66,7 +66,7 @@ public class Valuator
             var categoryName = row.ItemUICategory.IsValid ? row.ItemUICategory.Value.Name.ToString() : string.Empty;
             var unlockable = row.IsUnique && row.ItemAction.RowId != 0;
             var group = ItemGroups.Classify(row.ItemUICategory.RowId, categoryName, row.EquipSlotCategory.RowId != 0, row.IsUntradable, unlockable);
-            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId, group, System.Math.Max(1u, row.StackSize), row.IsUnique);
+            info = new ItemInfo(id, row.Name.ToString(), row.PriceLow, row.ItemSearchCategory.RowId != 0, row.IsUntradable, row.ItemUICategory.RowId, group, System.Math.Max(1u, row.StackSize), row.IsUnique, row.LevelItem.RowId);
         }
         else
         {

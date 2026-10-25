@@ -42,6 +42,10 @@ public class Configuration : IPluginConfiguration
     public int CrystalTopUpTarget { get; set; } = 999;
     public bool TopUpCrystalsAfterSort { get; set; } = false;
 
+    // Cleanup suggestions: items you have this few of in total, and items below this item level
+    public int SmallQuantity { get; set; } = 5;
+    public int OldItemLevel { get; set; } = 500;
+
     // Items you keep one stack of in your bags, topped up from your retainers; extra stacks stay in retainers
     public HashSet<uint> TopUpItemIds { get; set; } = new();
 

@@ -209,10 +209,27 @@ public class RetainersTab
         if (tour.Status.Length > 0)
             ImGui.TextUnformatted(tour.Status);
 
-        if (ImGui.SmallButton("Copy sorting log"))
-            ImGui.SetClipboardText(plugin.SortLog.Read());
+        var runs = plugin.SortLog.Runs();
+        if (ImGui.SmallButton("Copy last run's log") && runs.Count > 0)
+            ImGui.SetClipboardText(runs[0].Text);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip($"The last 10 runs, every visit and move with times. Paste it to Claude to tune the next version.\nSaved at {plugin.SortLog.FilePath}");
+            ImGui.SetTooltip($"Every visit and move of the last run, with times. Paste it to Claude to tune the next version.\nThe last 50 runs are saved at {plugin.SortLog.FilePath}");
+
+        if (ImGui.CollapsingHeader($"Sorting logs ({runs.Count})###sortlogs"))
+        {
+            for (var i = 0; i < runs.Count; i++)
+            {
+                var (title, text) = runs[i];
+                using var node = ImRaii.TreeNode($"{title}##run{i}");
+                if (!node.Success)
+                    continue;
+
+                if (ImGui.SmallButton($"Copy##copyrun{i}"))
+                    ImGui.SetClipboardText(text);
+                using var child = ImRaii.Child($"runtext{i}", new Vector2(0, 200 * ImGuiHelpers.GlobalScale), true);
+                ImGui.TextUnformatted(text);
+            }
+        }
     }
 
     private void DrawSortPreview(SortPreview preview)
