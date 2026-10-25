@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IMarketBoard MarketBoard { get; private set; } = null!;
+    [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
 
     internal static Plugin Instance { get; private set; } = null!;
 
@@ -37,6 +38,8 @@ public sealed class Plugin : IDalamudPlugin
     public Lister Lister { get; init; }
     public ArmoryCleaner ArmoryCleaner { get; init; }
     public RetainerTour RetainerTour { get; init; }
+    public ItemSorter ItemSorter { get; init; }
+    public SortLog SortLog { get; init; }
 
     public readonly WindowSystem WindowSystem = new("MarketHelper");
     private ConfigWindow ConfigWindow { get; init; }
@@ -55,7 +58,9 @@ public sealed class Plugin : IDalamudPlugin
         Organizer = new Organizer(Valuator);
         Lister = new Lister(this);
         ArmoryCleaner = new ArmoryCleaner(this);
+        SortLog = new SortLog(PluginInterface.GetPluginConfigDirectory());
         RetainerTour = new RetainerTour(this);
+        ItemSorter = new ItemSorter(this);
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
@@ -90,6 +95,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Lister.Dispose();
         ArmoryCleaner.Dispose();
+        ItemSorter.Dispose();
         RetainerTour.Dispose();
         Scanner.Dispose();
         Universalis.Dispose();

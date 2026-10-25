@@ -42,6 +42,8 @@ public sealed class StepRunner : IDisposable
 
     public void Add(string name, Func<StepResult> run, bool input = true) => steps.AddLast((name, run, input));
 
+    public void Add((string Name, Func<StepResult> Run, bool Input) step) => steps.AddLast(step);
+
     public void Add(string name, Action run, bool input = true) => Add(name, () =>
     {
         run();

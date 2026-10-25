@@ -39,6 +39,9 @@ public class Location
 
     public DateTime LastSeenUtc => CheckedUtc > UpdatedUtc ? CheckedUtc : UpdatedUtc;
     public List<ItemStack> Items { get; set; } = new();
+
+    // Retainers only: shards, crystals and clusters by item id, null until the retainer is opened
+    public Dictionary<uint, int>? Crystals { get; set; }
 }
 
 public class CharacterRecord

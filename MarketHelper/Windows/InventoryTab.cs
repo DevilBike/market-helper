@@ -88,6 +88,16 @@ public class InventoryTab
                 ImGui.TextDisabled("None yet. Tick items in your bags below, or right-click an item on the Valuation or Moves list.");
         }
 
+        if (ImGui.CollapsingHeader($"One stack on me, topped up ({Config.TopUpItemIds.Count})###topupitems"))
+        {
+            ImGui.TextWrapped("One stack of each stays in your bags and Sort tops it up from your retainers. Extra stacks go to the retainer their rules name.");
+            if (DrawRemovableList(Config.TopUpItemIds, "topup"))
+                Config.Save();
+
+            if (Config.TopUpItemIds.Count == 0)
+                ImGui.TextDisabled("None yet. Tick \"1 stack\" next to an item in your bags below.");
+        }
+
         if (ImGui.CollapsingHeader("In your bags now", ImGuiTreeNodeFlags.DefaultOpen))
             DrawBags();
     }
@@ -137,6 +147,20 @@ public class InventoryTab
                         Config.CarryItemIds.Remove(item.Id);
                     Config.Save();
                 }
+            }
+
+            if (item.StackSize <= 1 || carried)
+                continue;
+
+            ImGui.SameLine();
+            var topUp = Config.TopUpItemIds.Contains(item.Id);
+            if (ImGui.Checkbox($"1 stack##topup{item.Id}", ref topUp))
+            {
+                if (topUp)
+                    Config.TopUpItemIds.Add(item.Id);
+                else
+                    Config.TopUpItemIds.Remove(item.Id);
+                Config.Save();
             }
         }
     }

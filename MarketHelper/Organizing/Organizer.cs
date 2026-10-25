@@ -50,6 +50,11 @@ public class Organizer
         config.CarryItemIds.Contains(item.Id) ||
         (item.Group != ItemGroup.None && config.CarryGroups.Contains(item.Group));
 
+    // One stack stays in the bags and is topped up from retainers; the rest follow the retainer rules
+    public static bool IsToppedUp(ItemInfo item, Configuration config) =>
+        config.TopUpItemIds.Contains(item.Id) && item.StackSize > 1 &&
+        !IsCarried(item, config) && !IsSaddlebagged(item, config);
+
     public static bool IsSaddlebagged(ItemInfo item, Configuration config) =>
         !IsCarried(item, config) &&
         (config.SaddlebagItemIds.Contains(item.Id) ||
@@ -164,6 +169,16 @@ public class Organizer
                             if (kind == LocationKind.Bags)
                                 moves.Add(new Move(from, PlaceOf(owner, LocationKind.Saddlebag), item, group.Key.IsHq, quantity));
                             continue;
+                        }
+
+                        // The biggest stack of a topped-up item stays; only the extra stacks go
+                        if (kind == LocationKind.Bags && IsToppedUp(item, config))
+                        {
+                            var kept = place.Items.Where(s => s.ItemId == item.Id).MaxBy(s => s.Quantity);
+                            if (kept != null && kept.IsHq == group.Key.IsHq)
+                                quantity -= kept.Quantity;
+                            if (quantity <= 0)
+                                continue;
                         }
 
                         var target = Target(item, owner);
