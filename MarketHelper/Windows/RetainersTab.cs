@@ -634,6 +634,25 @@ public class RetainersTab
             }
         }
 
+        // Shows which retainer gets which rules before the second click, so a pairing you don't expect can be caught
+        if (confirmCopy)
+        {
+            var from = InOrder(source);
+            foreach (var target in retainers.Select(r => r.Owner).DistinctBy(o => o.ContentId).Where(o => o.ContentId != source.ContentId))
+            {
+                var to = InOrder(target);
+                ImGui.TextUnformatted($"{target.Name}:");
+                for (var i = 0; i < to.Count; i++)
+                {
+                    var giver = i < from.Count ? from[i].Name : "(no retainer, rules cleared)";
+                    ImGui.TextUnformatted($"    {i + 1}. {giver} -> {to[i].Name}");
+                }
+            }
+
+            if (ImGui.SmallButton("Cancel##copyrules"))
+                confirmCopy = false;
+        }
+
         var auto = config.TemplateOwnerId == source.ContentId;
         if (ImGui.Checkbox("Also copy to characters that have no rules yet, automatically", ref auto))
         {
