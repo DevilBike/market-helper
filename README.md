@@ -12,9 +12,9 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer per character as the catch-all. Each character has its own rules: a group or category lives in one retainer per character. The most specific rule wins: a single item, then a category, then a group, then the catch-all.
 
-By default each character's items stay with that character's retainers. Tick **Combine characters** to let rules send items to another character's retainers (those moves need trades); a rule on the item's own character still wins when two are equally specific.
+The tab shows one character at a time (the one you're logged in as, unless you pick another). By default each character's items stay with that character's retainers. Tick **Combine characters** to let rules send items to another character's retainers (those moves need trades); a rule on the item's own character still wins when two are equally specific.
 
-The Moves list shows what belongs elsewhere and can be searched and filtered. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
+The Moves list shows what belongs elsewhere and can be searched and filtered. **Across characters** lists tradable items that several characters hold in small amounts, and which character has the most, so you can trade them together. While a retainer is open, the top of the tab lists what to take out of it and put into it. Right-click a move to pin that item to a specific retainer.
 
 With the retainer list open at a summoning bell:
 
