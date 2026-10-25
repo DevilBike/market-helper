@@ -10,7 +10,7 @@ Status: all features are in. Batch listing is new and needs in-game testing.
 
 ## Retainer organizing
 
-On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles and unlocks, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer per character as the catch-all. Each character has its own rules: a group or category lives in one retainer per character. The most specific rule wins: a single item, then a category, then a group, then the catch-all.
+On the Retainers tab, pick a retainer and tick any number of broad groups it should hold (Consumables, Crafting materials, Equipment, Tokens, Housing, Collectibles, Materia, Seasonal, Fishing tackle), add detailed categories for whatever is left over, and mark one retainer per character as the catch-all. Each character has its own rules: a group or category lives in one retainer per character. The most specific rule wins: a single item, then a category, then a group, then the catch-all. Groups follow the game's own item categories, so every item is in exactly one group (Miscellany items such as coffers stay in the Miscellany category).
 
 The tab shows one character at a time (the one you're logged in as, unless you pick another). By default each character's items stay with that character's retainers. Tick **Combine characters** to let rules send items to another character's retainers (those moves need trades); a rule on the item's own character still wins when two are equally specific.
 
